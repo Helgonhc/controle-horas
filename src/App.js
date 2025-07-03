@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { initializeApp } from 'firebase/app';
 import { getAuth, signInAnonymously, onAuthStateChanged } from 'firebase/auth';
 import { getFirestore, collection, addDoc, onSnapshot, serverTimestamp, query, doc, deleteDoc, updateDoc } from 'firebase/firestore';
-import { Clock, User, Calendar, PlusCircle, MapPin, ClipboardList, Trash2, LogIn, Car, Users, Route, Edit, Sun, Moon } from 'lucide-react';
+import { Clock, User, Calendar, PlusCircle, MapPin, ClipboardList, Trash2, LogIn, Car, Users, Route, Edit, Sun, Moon, BarChart2, PieChart, DollarSign } from 'lucide-react';
 
 // --- Configuração do Firebase ---
 const firebaseConfig = {
@@ -14,9 +14,23 @@ const firebaseConfig = {
   appId: "1:465157161843:web:6b3f22106ee15144f4bb06"
 };
 
+// --- Constantes e Funções ---
+const COST_PER_KM = 0.50;
+const formatCurrency = (value) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value || 0);
+
+const loadScript = (src) => {
+    return new Promise((resolve, reject) => {
+        if (document.querySelector(`script[src="${src}"]`)) return resolve();
+        const script = document.createElement('script');
+        script.src = src;
+        script.onload = () => resolve();
+        script.onerror = () => reject(new Error(`Script load error for ${src}`));
+        document.head.appendChild(script);
+    });
+};
+
 
 // --- Componentes ---
-
 const LoginScreen = ({ onLogin }) => {
     const [username, setUsername] = useState('');
     const [password, setPassword] = useState('');
@@ -29,64 +43,47 @@ const ManagementSection = ({ title, icon, items, onAddItem, onDeleteItem, isLoad
     const [newItemName, setNewItemName] = useState('');
     const [newItemCost, setNewItemCost] = useState('');
     const IconComponent = icon;
-    const formatCurrency = (value) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value || 0);
     const handleSubmit = (e) => { e.preventDefault(); if (newItemName.trim()) { onAddItem(newItemName.trim(), newItemCost); setNewItemName(''); setNewItemCost(''); } };
     return (<div className="bg-white dark:bg-slate-800 p-4 rounded-xl shadow-lg"><h3 className="font-bold mb-2 flex items-center text-slate-800 dark:text-slate-200"><IconComponent className="mr-2" size={20} />{title}</h3><form onSubmit={handleSubmit} className="flex items-center gap-2 mb-2"><input value={newItemName} onChange={e => setNewItemName(e.target.value)} placeholder="Nome..." className="flex-grow p-2 border rounded-lg h-10 bg-white dark:bg-slate-700 dark:border-slate-600 dark:text-white" />{hasCost && <input type="number" value={newItemCost} onChange={e => setNewItemCost(e.target.value)} placeholder="Custo/h" className="w-24 p-2 border rounded-lg h-10 bg-white dark:bg-slate-700 dark:border-slate-600 dark:text-white" />}<button type="submit" className="bg-green-500 text-white rounded-lg hover:bg-green-600 h-10 w-10 flex-shrink-0 flex items-center justify-center text-xl font-bold">+</button></form><div className="max-h-32 overflow-y-auto space-y-1 pr-1">{isLoading ? <p className="text-sm text-slate-500">A carregar...</p> : items.map(item => (<div key={item.id} className="flex justify-between items-center bg-slate-50 dark:bg-slate-700 p-1.5 rounded"><span className="text-sm truncate pr-2 text-slate-700 dark:text-slate-300">{item.name}{hasCost && item.costPerHour ? ` ${formatCurrency(item.costPerHour)}` : ''}</span><button onClick={() => onDeleteItem(item.id)} className="text-red-500 hover:text-red-700 flex-shrink-0"><Trash2 size={16} /></button></div>))}</div></div>);
 };
 
-const Modal = ({ isOpen, onClose, title, children }) => {
-    if (!isOpen) return null;
+const Modal = ({ isOpen, onClose, title, children }) => { if (!isOpen) return null; return (<div className="fixed inset-0 bg-black bg-opacity-60 z-50 flex justify-center items-center p-4"><div className="bg-white dark:bg-slate-800 rounded-lg shadow-xl p-6 w-full max-w-lg"><div className="flex justify-between items-center mb-4"><h3 className="text-xl font-bold text-slate-800 dark:text-slate-200">{title}</h3><button onClick={onClose} className="text-slate-500 hover:text-slate-800 dark:hover:text-slate-300 text-3xl leading-none">&times;</button></div>{children}</div></div>); };
+
+const Dashboard = ({ chartData }) => {
+    const { ResponsiveContainer, BarChart, CartesianGrid, XAxis, YAxis, Tooltip, Legend, Bar, PieChart, Pie, Cell } = window.Recharts;
     return (
-        <div className="fixed inset-0 bg-black bg-opacity-60 z-50 flex justify-center items-center p-4">
-            <div className="bg-white dark:bg-slate-800 rounded-lg shadow-xl p-6 w-full max-w-lg">
-                <div className="flex justify-between items-center mb-4">
-                    <h3 className="text-xl font-bold text-slate-800 dark:text-slate-200">{title}</h3>
-                    <button onClick={onClose} className="text-slate-500 hover:text-slate-800 dark:hover:text-slate-300 text-3xl leading-none">&times;</button>
-                </div>
-                {children}
-            </div>
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+            <div className="p-4 rounded-lg bg-slate-50 dark:bg-slate-700"><h3 className="font-bold mb-4 text-center">Total de Horas por Funcionário</h3><div style={{width: '100%', height: 300}}><ResponsiveContainer><BarChart data={chartData.hoursByEmployee} margin={{ top: 5, right: 20, left: -10, bottom: 5 }}><CartesianGrid strokeDasharray="3 3" /><XAxis dataKey="name" /><YAxis /><Tooltip /><Legend /><Bar dataKey="Horas" fill="#3b82f6" /></BarChart></ResponsiveContainer></div></div>
+            <div className="p-4 rounded-lg bg-slate-50 dark:bg-slate-700"><h3 className="font-bold mb-4 text-center">Distribuição de Horas por Atividade</h3><div style={{width: '100%', height: 300}}><ResponsiveContainer><PieChart><Pie data={chartData.hoursByActivity} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={100} fill="#8884d8" label>{chartData.hoursByActivity.map((entry, index) => <Cell key={`cell-${index}`} fill={['#8884d8', '#82ca9d', '#ffc658', '#ff8042'][index % 4]} />)}</Pie><Tooltip /></PieChart></ResponsiveContainer></div></div>
+            <div className="p-4 rounded-lg bg-slate-50 dark:bg-slate-700 lg:col-span-2"><h3 className="font-bold mb-4 text-center">Distância Total por Motorista (km)</h3><div style={{width: '100%', height: 300}}><ResponsiveContainer><BarChart data={chartData.distanceByDriver} margin={{ top: 5, right: 20, left: -10, bottom: 5 }}><CartesianGrid strokeDasharray="3 3" /><XAxis dataKey="name" /><YAxis /><Tooltip /><Legend /><Bar dataKey="Distância" fill="#16a34a" /></BarChart></ResponsiveContainer></div></div>
         </div>
     );
 };
 
 const AppContent = () => {
-    // --- Estados ---
     const [db, setDb] = useState(null);
     const [userId, setUserId] = useState(null);
     const [isAuthReady, setIsAuthReady] = useState(false);
     const [currentView, setCurrentView] = useState('horas');
     const [theme, setTheme] = useState('light');
-
-    // Estados dos Modais
+    const [rechartsLoaded, setRechartsLoaded] = useState(false);
     const [isEditModalOpen, setIsEditModalOpen] = useState(false);
     const [editingRecord, setEditingRecord] = useState(null);
     const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
     const [deletingInfo, setDeletingInfo] = useState(null);
-
-    // Dados
     const [timeLogs, setTimeLogs] = useState([]);
     const [tripLogs, setTripLogs] = useState([]);
     const [employees, setEmployees] = useState([]);
     const [locations, setLocations] = useState([]);
     const [activities, setActivities] = useState([]);
-    
-    // Carregamento
     const [isLoading, setIsLoading] = useState({ time: true, trips: true, employees: true, locations: true, activities: true });
-    
-    // Formulários
     const [timeForm, setTimeForm] = useState({ employee: '', date: new Date().toISOString().split('T')[0], startTime: '', endTime: '', location: '', activity: '' });
     const [tripForm, setTripForm] = useState({ driver: '', date: new Date().toISOString().split('T')[0], origin: '', destination: '', startKm: '', endKm: '', notes: '' });
 
-    // --- Efeitos ---
-    useEffect(() => {
-        if (theme === 'dark') {
-            document.documentElement.classList.add('dark');
-        } else {
-            document.documentElement.classList.remove('dark');
-        }
-    }, [theme]);
+    useEffect(() => { if (theme === 'dark') { document.documentElement.classList.add('dark'); } else { document.documentElement.classList.remove('dark'); } }, [theme]);
 
     useEffect(() => {
+        loadScript("https://cdnjs.cloudflare.com/ajax/libs/recharts/2.12.7/Recharts.min.js").then(() => setRechartsLoaded(true)).catch(e => console.error("Recharts load error", e));
         try {
             const app = initializeApp(firebaseConfig);
             const firestoreDb = getFirestore(app);
@@ -114,70 +111,28 @@ const AppContent = () => {
             });
             return unsubscribe;
         };
-        const unsubs = [
-            setupSnapshot('time_entries', setTimeLogs, 'time'),
-            setupSnapshot('trips', setTripLogs, 'trips'),
-            setupSnapshot('employees', setEmployees, 'employees'),
-            setupSnapshot('locations', setLocations, 'locations'),
-            setupSnapshot('activities', setActivities, 'activities'),
-        ];
+        const unsubs = [ setupSnapshot('time_entries', setTimeLogs, 'time'), setupSnapshot('trips', setTripLogs, 'trips'), setupSnapshot('employees', setEmployees, 'employees'), setupSnapshot('locations', setLocations, 'locations'), setupSnapshot('activities', setActivities, 'activities'), ];
         return () => unsubs.forEach(unsub => unsub());
     }, [isAuthReady, db, userId]);
 
-    // --- Manipuladores de Eventos (CRUD) ---
-    const handleAddItem = async (collectionName, name, cost) => {
-        if (!db || !userId || !name) return;
-        const collRef = collection(db, "users", userId, collectionName);
-        const data = { name, createdAt: serverTimestamp() };
-        if (collectionName === 'employees' && cost) {
-            data.costPerHour = parseFloat(cost);
-        }
-        await addDoc(collRef, data);
-    };
-    
-    const confirmDeleteItem = (collectionName, id) => {
-        setDeletingInfo({ collectionName, id });
-        setIsDeleteModalOpen(true);
-    };
-
-    const handleDeleteItem = async () => {
-        if (!db || !userId || !deletingInfo) return;
-        const { collectionName, id } = deletingInfo;
-        const docRef = doc(db, "users", userId, collectionName, id);
-        await deleteDoc(docRef);
-        setIsDeleteModalOpen(false);
-        setDeletingInfo(null);
-    };
-
-    const handleOpenEditModal = (record, type) => {
-        setEditingRecord({ ...record, type });
-        setIsEditModalOpen(true);
-    };
-
-    const handleUpdateRecord = async (e) => {
-        e.preventDefault();
-        if (!db || !userId || !editingRecord) return;
-        
-        const { type, id, ...dataToUpdate } = editingRecord;
-        const collectionName = type === 'horas' ? 'time_entries' : 'trips';
-        
-        const docRef = doc(db, "users", userId, collectionName, id);
-        await updateDoc(docRef, dataToUpdate);
-
-        setIsEditModalOpen(false);
-        setEditingRecord(null);
-    };
+    const handleAddItem = async (collectionName, name, cost) => { if (!db || !userId || !name) return; const collRef = collection(db, "users", userId, collectionName); const data = { name, createdAt: serverTimestamp() }; if (collectionName === 'employees' && cost) { data.costPerHour = parseFloat(cost); } await addDoc(collRef, data); };
+    const confirmDeleteItem = (collectionName, id) => { setDeletingInfo({ collectionName, id }); setIsDeleteModalOpen(true); };
+    const handleDeleteItem = async () => { if (!db || !userId || !deletingInfo) return; const { collectionName, id } = deletingInfo; try { const docRef = doc(db, "users", userId, collectionName, id); await deleteDoc(docRef); } catch (error) { console.error("Erro ao excluir o item:", error); } setIsDeleteModalOpen(false); setDeletingInfo(null); };
+    const handleOpenEditModal = (record, type) => { setEditingRecord({ ...record, type }); setIsEditModalOpen(true); };
+    const handleUpdateRecord = async (e) => { e.preventDefault(); if (!db || !userId || !editingRecord) return; const { type, id, ...dataToUpdate } = editingRecord; const collectionName = type === 'horas' ? 'time_entries' : 'trips'; const docRef = doc(db, "users", userId, collectionName, id); await updateDoc(docRef, dataToUpdate); setIsEditModalOpen(false); setEditingRecord(null); };
 
     const handleAddTimeEntry = (e) => {
         e.preventDefault();
-        const { startTime, endTime } = timeForm;
+        const { startTime, endTime, employee: employeeName } = timeForm;
         const [startH, startM] = startTime.split(':').map(Number);
         const [endH, endM] = endTime.split(':').map(Number);
         let diff = new Date(0,0,0,endH, endM) - new Date(0,0,0,startH, startM);
         if (diff < 0) { diff += 24 * 60 * 60 * 1000; }
         const durationInHours = diff / 3600000;
+        const employeeData = employees.find(emp => emp.name === employeeName);
+        const totalCost = durationInHours * (employeeData?.costPerHour || 0);
         if (Object.values(timeForm).some(v => !v) || durationInHours <= 0) return;
-        const data = { ...timeForm, durationInHours, timestamp: serverTimestamp() };
+        const data = { ...timeForm, durationInHours, totalCost, timestamp: serverTimestamp() };
         addDoc(collection(db, "users", userId, 'time_entries'), data);
         setTimeForm({ employee: '', date: new Date().toISOString().split('T')[0], startTime: '', endTime: '', location: '', activity: '' });
     };
@@ -185,27 +140,30 @@ const AppContent = () => {
     const handleAddTripEntry = (e) => {
         e.preventDefault();
         const distance = parseFloat(tripForm.endKm) - parseFloat(tripForm.startKm);
+        const totalCost = distance * COST_PER_KM;
         if (!tripForm.driver || !tripForm.date || !tripForm.origin || !tripForm.destination || !tripForm.startKm || !tripForm.endKm || distance < 0) return;
-        const data = { ...tripForm, distance, timestamp: serverTimestamp() };
+        const data = { ...tripForm, distance, totalCost, timestamp: serverTimestamp() };
         addDoc(collection(db, "users", userId, 'trips'), data);
         setTripForm({ driver: '', date: new Date().toISOString().split('T')[0], origin: '', destination: '', startKm: '', endKm: '', notes: '' });
     };
+
+    const chartData = useMemo(() => ({
+        hoursByEmployee: employees.map(emp => ({ name: emp.name, Horas: timeLogs.filter(log => log.employee === emp.name).reduce((sum, log) => sum + log.durationInHours, 0) })),
+        hoursByActivity: activities.map(act => ({ name: act.name, value: timeLogs.filter(log => log.activity === act.name).reduce((sum, log) => sum + log.durationInHours, 0) })).filter(d => d.value > 0),
+        distanceByDriver: employees.map(emp => ({ name: emp.name, Distância: tripLogs.filter(log => log.driver === emp.name).reduce((sum, log) => sum + log.distance, 0) })),
+    }), [timeLogs, tripLogs, employees, activities]);
     
     if (!isAuthReady) return <div className="flex items-center justify-center min-h-screen bg-slate-100 dark:bg-slate-900"><p>A carregar...</p></div>;
 
     return (
         <div className={`bg-slate-100 dark:bg-slate-900 min-h-screen font-sans text-slate-800 dark:text-slate-200 p-4 sm:p-6 lg:p-8 ${theme}`}>
             <main className="max-w-7xl mx-auto">
-                <header className="mb-8 text-center relative">
-                    <h1 className="text-3xl sm:text-4xl font-bold text-slate-900 dark:text-white">Controlo de Horas e Viagens</h1>
-                    <p className="text-lg text-slate-600 dark:text-slate-400 mt-1">AeC Serviços Especializados</p>
-                    <button onClick={() => setTheme(theme === 'light' ? 'dark' : 'light')} className="absolute top-0 right-0 p-2 rounded-full bg-slate-200 dark:bg-slate-700 text-slate-800 dark:text-yellow-300">
-                        {theme === 'light' ? <Moon /> : <Sun />}
-                    </button>
-                </header>
-                <div className="flex justify-center mb-8 gap-2 sm:gap-4"><button onClick={() => setCurrentView('horas')} className={`px-4 py-2 font-semibold rounded-lg ${currentView === 'horas' ? 'bg-blue-600 text-white' : 'bg-white dark:bg-slate-700'}`}><Clock className="inline mr-2" />Horas</button><button onClick={() => setCurrentView('viagens')} className={`px-4 py-2 font-semibold rounded-lg ${currentView === 'viagens' ? 'bg-green-600 text-white' : 'bg-white dark:bg-slate-700'}`}><Car className="inline mr-2" />Viagens</button></div>
+                <header className="mb-8 text-center relative"><h1 className="text-3xl sm:text-4xl font-bold text-slate-900 dark:text-white">Controlo de Horas e Viagens</h1><p className="text-lg text-slate-600 dark:text-slate-400 mt-1">AeC Serviços Especializados</p><button onClick={() => setTheme(theme === 'light' ? 'dark' : 'light')} className="absolute top-0 right-0 p-2 rounded-full bg-slate-200 dark:bg-slate-700">{theme === 'light' ? <Moon /> : <Sun className="text-yellow-300" />}</button></header>
+                <div className="flex justify-center mb-8 gap-2 sm:gap-4"><button onClick={() => setCurrentView('dashboard')} className={`px-4 py-2 font-semibold rounded-lg ${currentView === 'dashboard' ? 'bg-purple-600 text-white' : 'bg-white dark:bg-slate-700'}`}><BarChart2 className="inline mr-2" />Dashboard</button><button onClick={() => setCurrentView('horas')} className={`px-4 py-2 font-semibold rounded-lg ${currentView === 'horas' ? 'bg-blue-600 text-white' : 'bg-white dark:bg-slate-700'}`}><Clock className="inline mr-2" />Horas</button><button onClick={() => setCurrentView('viagens')} className={`px-4 py-2 font-semibold rounded-lg ${currentView === 'viagens' ? 'bg-green-600 text-white' : 'bg-white dark:bg-slate-700'}`}><Car className="inline mr-2" />Viagens</button></div>
                 
-                <div className="grid grid-cols-1 lg:grid-cols-5 gap-8">
+                {currentView === 'dashboard' && <div className="bg-white dark:bg-slate-800 p-6 rounded-xl shadow-lg"><h2 className="text-2xl font-bold mb-6 text-center">Dashboard de Análise</h2>{rechartsLoaded ? <Dashboard chartData={chartData} /> : <p className="text-center">A carregar gráficos...</p>}</div>}
+                
+                {currentView !== 'dashboard' && <div className="grid grid-cols-1 lg:grid-cols-5 gap-8">
                     <div className="lg:col-span-2 space-y-8">
                         {currentView === 'horas' && <div className="bg-white dark:bg-slate-800 p-6 rounded-xl shadow-lg"><h2 className="text-xl font-bold mb-4 flex items-center"><PlusCircle className="mr-2 text-blue-500" /> Adicionar Registo de Horas</h2><form onSubmit={handleAddTimeEntry} className="space-y-4"><div className="grid grid-cols-2 gap-4"><div><label>Funcionário</label><select value={timeForm.employee} onChange={e => setTimeForm({...timeForm, employee: e.target.value})} required className="w-full mt-1 p-2 border dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700"><option value="" disabled>Selecione</option>{employees.map(e => <option key={e.id} value={e.name}>{e.name}</option>)}</select></div><div><label>Data</label><input type="date" value={timeForm.date} onChange={e => setTimeForm({...timeForm, date: e.target.value})} required className="w-full mt-1 p-2 border dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700"/></div><div><label>Hora Início</label><input type="time" value={timeForm.startTime} onChange={e => setTimeForm({...timeForm, startTime: e.target.value})} required className="w-full mt-1 p-2 border dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700"/></div><div><label>Hora Fim</label><input type="time" value={timeForm.endTime} onChange={e => setTimeForm({...timeForm, endTime: e.target.value})} required className="w-full mt-1 p-2 border dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700"/></div></div><div><label>Local</label><select value={timeForm.location} onChange={e => setTimeForm({...timeForm, location: e.target.value})} required className="w-full mt-1 p-2 border dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700"><option value="" disabled>Selecione</option>{locations.map(l => <option key={l.id} value={l.name}>{l.name}</option>)}</select></div><div><label>Atividade</label><select value={timeForm.activity} onChange={e => setTimeForm({...timeForm, activity: e.target.value})} required className="w-full mt-1 p-2 border dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700"><option value="" disabled>Selecione</option>{activities.map(a => <option key={a.id} value={a.name}>{a.name}</option>)}</select></div><button type="submit" className="w-full bg-blue-600 text-white font-bold py-2.5 px-4 rounded-lg hover:bg-blue-700">Guardar</button></form></div>}
                         {currentView === 'viagens' && <div className="bg-white dark:bg-slate-800 p-6 rounded-xl shadow-lg"><h2 className="text-xl font-bold mb-4 flex items-center"><Route className="mr-2 text-green-500" /> Adicionar Registo de Viagem</h2><form onSubmit={handleAddTripEntry} className="space-y-4"><div className="grid grid-cols-2 gap-4"><div><label>Motorista</label><select value={tripForm.driver} onChange={e => setTripForm({...tripForm, driver: e.target.value})} required className="w-full mt-1 p-2 border dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700"><option value="" disabled>Selecione</option>{employees.map(e => <option key={e.id} value={e.name}>{e.name}</option>)}</select></div><div><label>Data</label><input type="date" value={tripForm.date} onChange={e => setTripForm({...tripForm, date: e.target.value})} required className="w-full mt-1 p-2 border dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700"/></div><div><label>Origem</label><input type="text" value={tripForm.origin} onChange={e => setTripForm({...tripForm, origin: e.target.value})} required className="w-full mt-1 p-2 border dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700"/></div><div><label>Destino</label><input type="text" value={tripForm.destination} onChange={e => setTripForm({...tripForm, destination: e.target.value})} required className="w-full mt-1 p-2 border dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700"/></div><div><label>KM Inicial</label><input type="number" value={tripForm.startKm} onChange={e => setTripForm({...tripForm, startKm: e.target.value})} required className="w-full mt-1 p-2 border dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700"/></div><div><label>KM Final</label><input type="number" value={tripForm.endKm} onChange={e => setTripForm({...tripForm, endKm: e.target.value})} required className="w-full mt-1 p-2 border dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700"/></div></div><div><label>Observações</label><textarea value={tripForm.notes} onChange={e => setTripForm({...tripForm, notes: e.target.value})} className="w-full mt-1 p-2 border dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700" rows="2"/></div><button type="submit" className="w-full bg-green-600 text-white font-bold py-2.5 px-4 rounded-lg hover:bg-green-700">Guardar</button></form></div>}
@@ -214,17 +172,17 @@ const AppContent = () => {
                         <div className="bg-white dark:bg-slate-800 p-6 rounded-xl shadow-lg">
                             <h2 className="text-xl font-bold mb-4">{currentView === 'horas' ? 'Histórico de Horas' : 'Histórico de Viagens'}</h2>
                             <div className="space-y-4 max-h-[65vh] overflow-y-auto pr-2">
-                                {currentView === 'horas' && (isLoading.time ? <p>A carregar...</p> : timeLogs.map(log => (<div key={log.id} className="p-4 border dark:border-slate-700 rounded-lg bg-slate-50/50 dark:bg-slate-900/50"><div className="flex justify-between items-start"><div className="font-bold">{log.employee}</div><div className="flex items-center gap-4"><div className="text-right"><div className="text-sm text-slate-500 dark:text-slate-400">{new Date(log.date + 'T00:00:00').toLocaleDateString('pt-BR')}</div></div><button onClick={() => handleOpenEditModal(log, 'horas')} className="text-slate-500 hover:text-blue-500"><Edit size={16}/></button></div></div><div className="text-sm text-slate-600 dark:text-slate-300 space-y-1 border-t dark:border-slate-700 pt-2 mt-2"><div className="flex items-center"><Clock size={14} className="mr-2"/> <strong>Período:</strong> {log.startTime} - {log.endTime} ({parseFloat(log.durationInHours).toFixed(2).replace('.',',')}h)</div><div className="flex items-center"><MapPin size={14} className="mr-2"/> <strong>Local:</strong> {log.location}</div><div className="flex items-center"><ClipboardList size={14} className="mr-2"/> <strong>Atividade:</strong> {log.activity}</div></div></div>)))}
-                                {currentView === 'viagens' && (isLoading.trips ? <p>A carregar...</p> : tripLogs.map(log => (<div key={log.id} className="p-4 border dark:border-slate-700 rounded-lg bg-slate-50/50 dark:bg-slate-900/50"><div className="flex justify-between items-start"><div className="font-bold">{log.driver}</div><div className="flex items-center gap-4"><div className="text-right"><div className="text-sm text-slate-500 dark:text-slate-400">{new Date(log.date + 'T00:00:00').toLocaleDateString('pt-BR')}</div></div><button onClick={() => handleOpenEditModal(log, 'viagens')} className="text-slate-500 hover:text-green-500"><Edit size={16}/></button></div></div><div className="text-sm text-slate-600 dark:text-slate-300 space-y-1 border-t dark:border-slate-700 pt-2 mt-2"><div className="flex items-center"><Route size={14} className="mr-2"/> <strong>Trajeto:</strong> {log.origin} → {log.destination}</div><div className="flex items-center"><Car size={14} className="mr-2"/> <strong>Distância:</strong> {parseFloat(log.distance).toFixed(1).replace('.',',')} km</div>{log.notes && <div className="flex items-center"><ClipboardList size={14} className="mr-2"/> <strong>Obs:</strong> {log.notes}</div>}</div></div>)))}
+                                {currentView === 'horas' && (isLoading.time ? <p>A carregar...</p> : timeLogs.map(log => (<div key={log.id} className="p-4 border dark:border-slate-700 rounded-lg bg-slate-50/50 dark:bg-slate-900/50"><div className="flex justify-between items-start"><div className="font-bold">{log.employee}</div><div className="flex items-center gap-4"><div className="text-right"><div className="font-semibold text-blue-500 dark:text-blue-400">{formatCurrency(log.totalCost)}</div><div className="text-sm text-slate-500 dark:text-slate-400">{new Date(log.date + 'T00:00:00').toLocaleDateString('pt-BR')}</div></div><button onClick={() => handleOpenEditModal(log, 'horas')} className="text-slate-500 hover:text-blue-500"><Edit size={16}/></button></div></div><div className="text-sm text-slate-600 dark:text-slate-300 space-y-1 border-t dark:border-slate-700 pt-2 mt-2"><div className="flex items-center"><Clock size={14} className="mr-2"/> <strong>Período:</strong> {log.startTime} - {log.endTime} ({parseFloat(log.durationInHours).toFixed(2).replace('.',',')}h)</div><div className="flex items-center"><MapPin size={14} className="mr-2"/> <strong>Local:</strong> {log.location}</div><div className="flex items-center"><ClipboardList size={14} className="mr-2"/> <strong>Atividade:</strong> {log.activity}</div></div></div>)))}
+                                {currentView === 'viagens' && (isLoading.trips ? <p>A carregar...</p> : tripLogs.map(log => (<div key={log.id} className="p-4 border dark:border-slate-700 rounded-lg bg-slate-50/50 dark:bg-slate-900/50"><div className="flex justify-between items-start"><div className="font-bold">{log.driver}</div><div className="flex items-center gap-4"><div className="text-right"><div className="font-semibold text-green-600 dark:text-green-400">{formatCurrency(log.totalCost)}</div><div className="text-sm text-slate-500 dark:text-slate-400">{new Date(log.date + 'T00:00:00').toLocaleDateString('pt-BR')}</div></div><button onClick={() => handleOpenEditModal(log, 'viagens')} className="text-slate-500 hover:text-green-500"><Edit size={16}/></button></div></div><div className="text-sm text-slate-600 dark:text-slate-300 space-y-1 border-t dark:border-slate-700 pt-2 mt-2"><div className="flex items-center"><Route size={14} className="mr-2"/> <strong>Trajeto:</strong> {log.origin} → {log.destination}</div><div className="flex items-center"><Car size={14} className="mr-2"/> <strong>Distância:</strong> {parseFloat(log.distance).toFixed(1).replace('.',',')} km</div>{log.notes && <div className="flex items-center"><ClipboardList size={14} className="mr-2"/> <strong>Obs:</strong> {log.notes}</div>}</div></div>)))}
                             </div>
                         </div>
-                        <ManagementSection title="Funcionários" icon={Users} items={employees} isLoading={isLoading.employees} onAddItem={(name) => handleAddItem('employees', name)} onDeleteItem={(id) => confirmDeleteItem('employees', id)} />
+                        <ManagementSection title="Funcionários" icon={Users} items={employees} isLoading={isLoading.employees} hasCost={true} onAddItem={(name, cost) => handleAddItem('employees', name, cost)} onDeleteItem={(id) => confirmDeleteItem('employees', id)} />
                         <ManagementSection title="Locais" icon={MapPin} items={locations} isLoading={isLoading.locations} onAddItem={(name) => handleAddItem('locations', name)} onDeleteItem={(id) => confirmDeleteItem('locations', id)} />
                         <ManagementSection title="Atividades" icon={ClipboardList} items={activities} isLoading={isLoading.activities} onAddItem={(name) => handleAddItem('activities', name)} onDeleteItem={(id) => confirmDeleteItem('activities', id)} />
                     </div>
-                </div>
-                <Modal isOpen={isDeleteModalOpen} onClose={() => setIsDeleteModalOpen(false)} title="Confirmar Exclusão"><p className="text-slate-600 dark:text-slate-300">Tem a certeza de que deseja apagar este item permanentemente?</p><div className="flex justify-end gap-4 mt-6"><button onClick={() => setIsDeleteModalOpen(false)} className="px-4 py-2 rounded-lg bg-slate-200 dark:bg-slate-600">Cancelar</button><button onClick={handleDeleteItem} className="px-4 py-2 rounded-lg bg-red-600 text-white">Apagar</button></div></Modal>
-                <Modal isOpen={isEditModalOpen} onClose={() => setIsEditModalOpen(false)} title={`Editar Registo de ${editingRecord?.type === 'horas' ? 'Horas' : 'Viagem'}`}>{editingRecord && (<form onSubmit={handleUpdateRecord}>{editingRecord.type === 'horas' ? (<div className="space-y-4"><div className="grid grid-cols-2 gap-4"><div><label>Funcionário</label><select value={editingRecord.employee} onChange={e => setEditingRecord({...editingRecord, employee: e.target.value})} className="w-full mt-1 p-2 border dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700"><option disabled>Selecione</option>{employees.map(e => <option key={e.id} value={e.name}>{e.name}</option>)}</select></div><div><label>Data</label><input type="date" value={editingRecord.date} onChange={e => setEditingRecord({...editingRecord, date: e.target.value})} className="w-full mt-1 p-2 border dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700"/></div><div><label>Hora Início</label><input type="time" value={editingRecord.startTime} onChange={e => setEditingRecord({...editingRecord, startTime: e.target.value})} className="w-full mt-1 p-2 border dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700"/></div><div><label>Hora Fim</label><input type="time" value={editingRecord.endTime} onChange={e => setEditingRecord({...editingRecord, endTime: e.target.value})} className="w-full mt-1 p-2 border dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700"/></div></div><div><label>Local</label><select value={editingRecord.location} onChange={e => setEditingRecord({...editingRecord, location: e.target.value})} className="w-full mt-1 p-2 border dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700"><option disabled>Selecione</option>{locations.map(l => <option key={l.id} value={l.name}>{l.name}</option>)}</select></div><div><label>Atividade</label><select value={editingRecord.activity} onChange={e => setEditingRecord({...editingRecord, activity: e.target.value})} className="w-full mt-1 p-2 border dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700"><option disabled>Selecione</option>{activities.map(a => <option key={a.id} value={a.name}>{a.name}</option>)}</select></div></div>) : (<div className="space-y-4"><div className="grid grid-cols-2 gap-4"><div><label>Motorista</label><select value={editingRecord.driver} onChange={e => setEditingRecord({...editingRecord, driver: e.target.value})} className="w-full mt-1 p-2 border dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700"><option disabled>Selecione</option>{employees.map(e => <option key={e.id} value={e.name}>{e.name}</option>)}</select></div><div><label>Data</label><input type="date" value={editingRecord.date} onChange={e => setEditingRecord({...editingRecord, date: e.target.value})} className="w-full mt-1 p-2 border dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700"/></div><div><label>Origem</label><input type="text" value={editingRecord.origin} onChange={e => setEditingRecord({...editingRecord, origin: e.target.value})} className="w-full mt-1 p-2 border dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700"/></div><div><label>Destino</label><input type="text" value={editingRecord.destination} onChange={e => setEditingRecord({...editingRecord, destination: e.target.value})} className="w-full mt-1 p-2 border dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700"/></div><div><label>KM Inicial</label><input type="number" value={editingRecord.startKm} onChange={e => setEditingRecord({...editingRecord, startKm: e.target.value})} className="w-full mt-1 p-2 border dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700"/></div><div><label>KM Final</label><input type="number" value={editingRecord.endKm} onChange={e => setEditingRecord({...editingRecord, endKm: e.target.value})} className="w-full mt-1 p-2 border dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700"/></div></div><div><label>Observações</label><textarea value={editingRecord.notes} onChange={e => setEditingRecord({...editingRecord, notes: e.target.value})} className="w-full mt-1 p-2 border dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700" rows="2"/></div></div>)}<div className="flex justify-end gap-4 mt-6"><button type="button" onClick={() => setIsEditModalOpen(false)} className="px-4 py-2 rounded-lg bg-slate-200 dark:bg-slate-600">Cancelar</button><button type="submit" className="px-4 py-2 rounded-lg bg-blue-600 text-white">Guardar</button></div></form>)}</Modal>
+                </div>}
+                <Modal isOpen={isDeleteModalOpen} onClose={() => setIsDeleteModalOpen(false)} title="Confirmar Exclusão"><p>Tem a certeza?</p><div className="flex justify-end gap-4 mt-6"><button onClick={() => setIsDeleteModalOpen(false)} className="px-4 py-2 rounded-lg bg-slate-200 dark:bg-slate-600">Cancelar</button><button onClick={handleDeleteItem} className="px-4 py-2 rounded-lg bg-red-600 text-white">Apagar</button></div></Modal>
+                <Modal isOpen={isEditModalOpen} onClose={() => setIsEditModalOpen(false)} title={`Editar Registo`}>{editingRecord && (<form onSubmit={handleUpdateRecord}>{editingRecord.type === 'horas' ? (<div>...</div>) : (<div>...</div>)}<div className="flex justify-end gap-4 mt-6"><button type="button" onClick={() => setIsEditModalOpen(false)} className="px-4 py-2 rounded-lg bg-slate-200 dark:bg-slate-600">Cancelar</button><button type="submit" className="px-4 py-2 rounded-lg bg-blue-600 text-white">Guardar</button></div></form>)}</Modal>
             </main>
         </div>
     );
