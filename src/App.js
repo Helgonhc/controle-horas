@@ -2,7 +2,8 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { initializeApp } from 'firebase/app';
 import { getAuth, signInAnonymously, onAuthStateChanged } from 'firebase/auth';
 import { getFirestore, collection, addDoc, onSnapshot, serverTimestamp, query, doc, deleteDoc, updateDoc } from 'firebase/firestore';
-import { Clock, User, Calendar, PlusCircle, MapPin, ClipboardList, Trash2, LogIn, Car, Users, Route, Edit, Sun, Moon, BarChart2, PieChart, DollarSign } from 'lucide-react';
+import { Clock, User, Calendar, PlusCircle, MapPin, ClipboardList, Trash2, LogIn, Car, Users, Route, Edit, Sun, Moon, BarChart2 } from 'lucide-react';
+import { Dashboard } from './Dashboard';
 
 // --- Configuração do Firebase ---
 const firebaseConfig = {
@@ -16,19 +17,7 @@ const firebaseConfig = {
 
 // --- Constantes e Funções ---
 const COST_PER_KM = 0.50;
-const formatCurrency = (value) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value || 0);
-
-const loadScript = (src) => {
-    return new Promise((resolve, reject) => {
-        if (document.querySelector(`script[src="${src}"]`)) return resolve();
-        const script = document.createElement('script');
-        script.src = src;
-        script.onload = () => resolve();
-        script.onerror = () => reject(new Error(`Script load error for ${src}`));
-        document.head.appendChild(script);
-    });
-};
-
+const formatCurrency = (value) => new Intl.NumberFormat('pt-PT', { style: 'currency', currency: 'BRL' }).format(value || 0);
 
 // --- Componentes ---
 const LoginScreen = ({ onLogin }) => {
@@ -44,21 +33,10 @@ const ManagementSection = ({ title, icon, items, onAddItem, onDeleteItem, isLoad
     const [newItemCost, setNewItemCost] = useState('');
     const IconComponent = icon;
     const handleSubmit = (e) => { e.preventDefault(); if (newItemName.trim()) { onAddItem(newItemName.trim(), newItemCost); setNewItemName(''); setNewItemCost(''); } };
-    return (<div className="bg-white dark:bg-slate-800 p-4 rounded-xl shadow-lg"><h3 className="font-bold mb-2 flex items-center text-slate-800 dark:text-slate-200"><IconComponent className="mr-2" size={20} />{title}</h3><form onSubmit={handleSubmit} className="flex items-center gap-2 mb-2"><input value={newItemName} onChange={e => setNewItemName(e.target.value)} placeholder="Nome..." className="flex-grow p-2 border rounded-lg h-10 bg-white dark:bg-slate-700 dark:border-slate-600 dark:text-white" />{hasCost && <input type="number" value={newItemCost} onChange={e => setNewItemCost(e.target.value)} placeholder="Custo/h" className="w-24 p-2 border rounded-lg h-10 bg-white dark:bg-slate-700 dark:border-slate-600 dark:text-white" />}<button type="submit" className="bg-green-500 text-white rounded-lg hover:bg-green-600 h-10 w-10 flex-shrink-0 flex items-center justify-center text-xl font-bold">+</button></form><div className="max-h-32 overflow-y-auto space-y-1 pr-1">{isLoading ? <p className="text-sm text-slate-500">A carregar...</p> : items.map(item => (<div key={item.id} className="flex justify-between items-center bg-slate-50 dark:bg-slate-700 p-1.5 rounded"><span className="text-sm truncate pr-2 text-slate-700 dark:text-slate-300">{item.name}{hasCost && item.costPerHour ? ` ${formatCurrency(item.costPerHour)}` : ''}</span><button onClick={() => onDeleteItem(item.id)} className="text-red-500 hover:text-red-700 flex-shrink-0"><Trash2 size={16} /></button></div>))}</div></div>);
+    return (<div className="bg-white dark:bg-slate-800 p-4 rounded-xl shadow-lg"><h3 className="font-bold mb-2 flex items-center text-slate-800 dark:text-slate-200"><IconComponent className="mr-2" size={20} />{title}</h3><form onSubmit={handleSubmit} className="flex items-center gap-2 mb-2"><input value={newItemName} onChange={e => setNewItemName(e.target.value)} placeholder="Nome..." className="flex-grow p-2 border rounded-lg h-10 bg-white dark:bg-slate-700 dark:border-slate-600 dark:text-white" />{hasCost && <input type="number" value={newItemCost} onChange={e => setNewItemCost(e.target.value)} placeholder="Custo/h" className="w-24 p-2 border rounded-lg h-10 bg-white dark:bg-slate-700 dark:border-slate-600 dark:text-white" />}<button type="submit" className="bg-green-500 text-white rounded-lg hover:bg-green-600 h-10 w-10 flex-shrink-0 flex items-center justify-center text-xl font-bold">+</button></form><div className="max-h-32 overflow-y-auto space-y-1 pr-1">{isLoading ? <p className="text-sm text-slate-500">A carregar...</p> : items.map(item => (<div key={item.id} className="flex justify-between items-center bg-slate-50 dark:bg-slate-700 p-1.5 rounded"><span className="text-sm truncate pr-2 text-slate-700 dark:text-slate-300">{item.name}{hasCost && ` (${formatCurrency(item.costPerHour)})`}</span><button onClick={() => onDeleteItem(item.id)} className="text-red-500 hover:text-red-700 flex-shrink-0"><Trash2 size={16} /></button></div>))}</div></div>);
 };
 
-const Modal = ({ isOpen, onClose, title, children }) => { if (!isOpen) return null; return (<div className="fixed inset-0 bg-black bg-opacity-60 z-50 flex justify-center items-center p-4"><div className="bg-white dark:bg-slate-800 rounded-lg shadow-xl p-6 w-full max-w-lg"><div className="flex justify-between items-center mb-4"><h3 className="text-xl font-bold text-slate-800 dark:text-slate-200">{title}</h3><button onClick={onClose} className="text-slate-500 hover:text-slate-800 dark:hover:text-slate-300 text-3xl leading-none">&times;</button></div>{children}</div></div>); };
-
-const Dashboard = ({ chartData }) => {
-    const { ResponsiveContainer, BarChart, CartesianGrid, XAxis, YAxis, Tooltip, Legend, Bar, PieChart, Pie, Cell } = window.Recharts;
-    return (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-            <div className="p-4 rounded-lg bg-slate-50 dark:bg-slate-700"><h3 className="font-bold mb-4 text-center">Total de Horas por Funcionário</h3><div style={{width: '100%', height: 300}}><ResponsiveContainer><BarChart data={chartData.hoursByEmployee} margin={{ top: 5, right: 20, left: -10, bottom: 5 }}><CartesianGrid strokeDasharray="3 3" /><XAxis dataKey="name" /><YAxis /><Tooltip /><Legend /><Bar dataKey="Horas" fill="#3b82f6" /></BarChart></ResponsiveContainer></div></div>
-            <div className="p-4 rounded-lg bg-slate-50 dark:bg-slate-700"><h3 className="font-bold mb-4 text-center">Distribuição de Horas por Atividade</h3><div style={{width: '100%', height: 300}}><ResponsiveContainer><PieChart><Pie data={chartData.hoursByActivity} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={100} fill="#8884d8" label>{chartData.hoursByActivity.map((entry, index) => <Cell key={`cell-${index}`} fill={['#8884d8', '#82ca9d', '#ffc658', '#ff8042'][index % 4]} />)}</Pie><Tooltip /></PieChart></ResponsiveContainer></div></div>
-            <div className="p-4 rounded-lg bg-slate-50 dark:bg-slate-700 lg:col-span-2"><h3 className="font-bold mb-4 text-center">Distância Total por Motorista (km)</h3><div style={{width: '100%', height: 300}}><ResponsiveContainer><BarChart data={chartData.distanceByDriver} margin={{ top: 5, right: 20, left: -10, bottom: 5 }}><CartesianGrid strokeDasharray="3 3" /><XAxis dataKey="name" /><YAxis /><Tooltip /><Legend /><Bar dataKey="Distância" fill="#16a34a" /></BarChart></ResponsiveContainer></div></div>
-        </div>
-    );
-};
+const Modal = ({ isOpen, onClose, title, children }) => { if (!isOpen) return null; return (<div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex justify-center items-center"><div className="bg-white dark:bg-slate-800 rounded-lg shadow-xl p-6 w-full max-w-lg m-4"><div className="flex justify-between items-center mb-4"><h3 className="text-xl font-bold text-slate-800 dark:text-slate-200">{title}</h3><button onClick={onClose} className="text-slate-500 hover:text-slate-800 dark:hover:text-slate-300">&times;</button></div>{children}</div></div>); };
 
 const AppContent = () => {
     const [db, setDb] = useState(null);
@@ -66,7 +44,6 @@ const AppContent = () => {
     const [isAuthReady, setIsAuthReady] = useState(false);
     const [currentView, setCurrentView] = useState('horas');
     const [theme, setTheme] = useState('light');
-    const [rechartsLoaded, setRechartsLoaded] = useState(false);
     const [isEditModalOpen, setIsEditModalOpen] = useState(false);
     const [editingRecord, setEditingRecord] = useState(null);
     const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
@@ -83,7 +60,6 @@ const AppContent = () => {
     useEffect(() => { if (theme === 'dark') { document.documentElement.classList.add('dark'); } else { document.documentElement.classList.remove('dark'); } }, [theme]);
 
     useEffect(() => {
-        loadScript("https://cdnjs.cloudflare.com/ajax/libs/recharts/2.12.7/Recharts.min.js").then(() => setRechartsLoaded(true)).catch(e => console.error("Recharts load error", e));
         try {
             const app = initializeApp(firebaseConfig);
             const firestoreDb = getFirestore(app);
@@ -105,7 +81,7 @@ const AppContent = () => {
             setIsLoading(prev => ({ ...prev, [loadingKey]: true }));
             const unsubscribe = onSnapshot(q, (snapshot) => {
                 const dataList = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-                dataList.sort((a, b) => (b.createdAt?.toDate() || 0) - (a.createdAt?.toDate() || 0));
+                dataList.sort((a, b) => (b.timestamp?.toDate() || b.createdAt?.toDate() || 0) - (a.timestamp?.toDate() || a.createdAt?.toDate() || 0));
                 setData(dataList);
                 setIsLoading(prev => ({ ...prev, [loadingKey]: false }));
             });
@@ -140,9 +116,8 @@ const AppContent = () => {
     const handleAddTripEntry = (e) => {
         e.preventDefault();
         const distance = parseFloat(tripForm.endKm) - parseFloat(tripForm.startKm);
-        const totalCost = distance * COST_PER_KM;
         if (!tripForm.driver || !tripForm.date || !tripForm.origin || !tripForm.destination || !tripForm.startKm || !tripForm.endKm || distance < 0) return;
-        const data = { ...tripForm, distance, totalCost, timestamp: serverTimestamp() };
+        const data = { ...tripForm, distance, totalCost: distance * COST_PER_KM, timestamp: serverTimestamp() };
         addDoc(collection(db, "users", userId, 'trips'), data);
         setTripForm({ driver: '', date: new Date().toISOString().split('T')[0], origin: '', destination: '', startKm: '', endKm: '', notes: '' });
     };
@@ -161,7 +136,7 @@ const AppContent = () => {
                 <header className="mb-8 text-center relative"><h1 className="text-3xl sm:text-4xl font-bold text-slate-900 dark:text-white">Controlo de Horas e Viagens</h1><p className="text-lg text-slate-600 dark:text-slate-400 mt-1">AeC Serviços Especializados</p><button onClick={() => setTheme(theme === 'light' ? 'dark' : 'light')} className="absolute top-0 right-0 p-2 rounded-full bg-slate-200 dark:bg-slate-700">{theme === 'light' ? <Moon /> : <Sun className="text-yellow-300" />}</button></header>
                 <div className="flex justify-center mb-8 gap-2 sm:gap-4"><button onClick={() => setCurrentView('dashboard')} className={`px-4 py-2 font-semibold rounded-lg ${currentView === 'dashboard' ? 'bg-purple-600 text-white' : 'bg-white dark:bg-slate-700'}`}><BarChart2 className="inline mr-2" />Dashboard</button><button onClick={() => setCurrentView('horas')} className={`px-4 py-2 font-semibold rounded-lg ${currentView === 'horas' ? 'bg-blue-600 text-white' : 'bg-white dark:bg-slate-700'}`}><Clock className="inline mr-2" />Horas</button><button onClick={() => setCurrentView('viagens')} className={`px-4 py-2 font-semibold rounded-lg ${currentView === 'viagens' ? 'bg-green-600 text-white' : 'bg-white dark:bg-slate-700'}`}><Car className="inline mr-2" />Viagens</button></div>
                 
-                {currentView === 'dashboard' && <div className="bg-white dark:bg-slate-800 p-6 rounded-xl shadow-lg"><h2 className="text-2xl font-bold mb-6 text-center">Dashboard de Análise</h2>{rechartsLoaded ? <Dashboard chartData={chartData} /> : <p className="text-center">A carregar gráficos...</p>}</div>}
+                {currentView === 'dashboard' && <div className="bg-white dark:bg-slate-800 p-6 rounded-xl shadow-lg"><h2 className="text-2xl font-bold mb-6 text-center">Dashboard de Análise</h2><Dashboard chartData={chartData} /></div>}
                 
                 {currentView !== 'dashboard' && <div className="grid grid-cols-1 lg:grid-cols-5 gap-8">
                     <div className="lg:col-span-2 space-y-8">
@@ -169,13 +144,6 @@ const AppContent = () => {
                         {currentView === 'viagens' && <div className="bg-white dark:bg-slate-800 p-6 rounded-xl shadow-lg"><h2 className="text-xl font-bold mb-4 flex items-center"><Route className="mr-2 text-green-500" /> Adicionar Registo de Viagem</h2><form onSubmit={handleAddTripEntry} className="space-y-4"><div className="grid grid-cols-2 gap-4"><div><label>Motorista</label><select value={tripForm.driver} onChange={e => setTripForm({...tripForm, driver: e.target.value})} required className="w-full mt-1 p-2 border dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700"><option value="" disabled>Selecione</option>{employees.map(e => <option key={e.id} value={e.name}>{e.name}</option>)}</select></div><div><label>Data</label><input type="date" value={tripForm.date} onChange={e => setTripForm({...tripForm, date: e.target.value})} required className="w-full mt-1 p-2 border dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700"/></div><div><label>Origem</label><input type="text" value={tripForm.origin} onChange={e => setTripForm({...tripForm, origin: e.target.value})} required className="w-full mt-1 p-2 border dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700"/></div><div><label>Destino</label><input type="text" value={tripForm.destination} onChange={e => setTripForm({...tripForm, destination: e.target.value})} required className="w-full mt-1 p-2 border dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700"/></div><div><label>KM Inicial</label><input type="number" value={tripForm.startKm} onChange={e => setTripForm({...tripForm, startKm: e.target.value})} required className="w-full mt-1 p-2 border dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700"/></div><div><label>KM Final</label><input type="number" value={tripForm.endKm} onChange={e => setTripForm({...tripForm, endKm: e.target.value})} required className="w-full mt-1 p-2 border dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700"/></div></div><div><label>Observações</label><textarea value={tripForm.notes} onChange={e => setTripForm({...tripForm, notes: e.target.value})} className="w-full mt-1 p-2 border dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700" rows="2"/></div><button type="submit" className="w-full bg-green-600 text-white font-bold py-2.5 px-4 rounded-lg hover:bg-green-700">Guardar</button></form></div>}
                     </div>
                     <div className="lg:col-span-3 space-y-6">
-                        <div className="bg-white dark:bg-slate-800 p-6 rounded-xl shadow-lg">
-                            <h2 className="text-xl font-bold mb-4">{currentView === 'horas' ? 'Histórico de Horas' : 'Histórico de Viagens'}</h2>
-                            <div className="space-y-4 max-h-[65vh] overflow-y-auto pr-2">
-                                {currentView === 'horas' && (isLoading.time ? <p>A carregar...</p> : timeLogs.map(log => (<div key={log.id} className="p-4 border dark:border-slate-700 rounded-lg bg-slate-50/50 dark:bg-slate-900/50"><div className="flex justify-between items-start"><div className="font-bold">{log.employee}</div><div className="flex items-center gap-4"><div className="text-right"><div className="font-semibold text-blue-500 dark:text-blue-400">{formatCurrency(log.totalCost)}</div><div className="text-sm text-slate-500 dark:text-slate-400">{new Date(log.date + 'T00:00:00').toLocaleDateString('pt-BR')}</div></div><button onClick={() => handleOpenEditModal(log, 'horas')} className="text-slate-500 hover:text-blue-500"><Edit size={16}/></button></div></div><div className="text-sm text-slate-600 dark:text-slate-300 space-y-1 border-t dark:border-slate-700 pt-2 mt-2"><div className="flex items-center"><Clock size={14} className="mr-2"/> <strong>Período:</strong> {log.startTime} - {log.endTime} ({parseFloat(log.durationInHours).toFixed(2).replace('.',',')}h)</div><div className="flex items-center"><MapPin size={14} className="mr-2"/> <strong>Local:</strong> {log.location}</div><div className="flex items-center"><ClipboardList size={14} className="mr-2"/> <strong>Atividade:</strong> {log.activity}</div></div></div>)))}
-                                {currentView === 'viagens' && (isLoading.trips ? <p>A carregar...</p> : tripLogs.map(log => (<div key={log.id} className="p-4 border dark:border-slate-700 rounded-lg bg-slate-50/50 dark:bg-slate-900/50"><div className="flex justify-between items-start"><div className="font-bold">{log.driver}</div><div className="flex items-center gap-4"><div className="text-right"><div className="font-semibold text-green-600 dark:text-green-400">{formatCurrency(log.totalCost)}</div><div className="text-sm text-slate-500 dark:text-slate-400">{new Date(log.date + 'T00:00:00').toLocaleDateString('pt-BR')}</div></div><button onClick={() => handleOpenEditModal(log, 'viagens')} className="text-slate-500 hover:text-green-500"><Edit size={16}/></button></div></div><div className="text-sm text-slate-600 dark:text-slate-300 space-y-1 border-t dark:border-slate-700 pt-2 mt-2"><div className="flex items-center"><Route size={14} className="mr-2"/> <strong>Trajeto:</strong> {log.origin} → {log.destination}</div><div className="flex items-center"><Car size={14} className="mr-2"/> <strong>Distância:</strong> {parseFloat(log.distance).toFixed(1).replace('.',',')} km</div>{log.notes && <div className="flex items-center"><ClipboardList size={14} className="mr-2"/> <strong>Obs:</strong> {log.notes}</div>}</div></div>)))}
-                            </div>
-                        </div>
                         <ManagementSection title="Funcionários" icon={Users} items={employees} isLoading={isLoading.employees} hasCost={true} onAddItem={(name, cost) => handleAddItem('employees', name, cost)} onDeleteItem={(id) => confirmDeleteItem('employees', id)} />
                         <ManagementSection title="Locais" icon={MapPin} items={locations} isLoading={isLoading.locations} onAddItem={(name) => handleAddItem('locations', name)} onDeleteItem={(id) => confirmDeleteItem('locations', id)} />
                         <ManagementSection title="Atividades" icon={ClipboardList} items={activities} isLoading={isLoading.activities} onAddItem={(name) => handleAddItem('activities', name)} onDeleteItem={(id) => confirmDeleteItem('activities', id)} />
