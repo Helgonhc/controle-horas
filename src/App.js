@@ -17,7 +17,7 @@ const firebaseConfig = {
 
 // --- Constantes e Funções ---
 const COST_PER_KM = 0.50;
-const formatCurrency = (value) => new Intl.NumberFormat('pt-PT', { style: 'currency', currency: 'EUR' }).format(value || 0);
+const formatCurrency = (value) => new Intl.NumberFormat('pt-PT', { style: 'currency', currency: 'BRL' }).format(value || 0);
 
 // --- Componentes ---
 const LoginScreen = ({ onLogin }) => {
