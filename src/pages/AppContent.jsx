@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { db, auth } from '../firebase/config';
+import { db, auth, storage } from '../firebase/config'; // Importe 'storage'
 import { collection, addDoc, serverTimestamp, doc, deleteDoc, updateDoc, query, orderBy } from 'firebase/firestore'; 
+import { ref, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage'; // Importe funções do Storage
 import { toast } from 'react-toastify';
 
 // Nossos componentes
@@ -31,24 +32,24 @@ export const AppContent = ({ user }) => {
 
     // Memoize as queries para useCollection
     const timeEntriesQuery = useMemo(() => 
-        query(collection(db, `users/${user.uid}/time_entries`), orderBy('createdAt', 'desc')),
-        [user.uid] 
+        user ? query(collection(db, `users/${user.uid}/time_entries`), orderBy('createdAt', 'desc')) : null,
+        [user] 
     );
     const tripsQuery = useMemo(() => 
-        query(collection(db, `users/${user.uid}/trips`), orderBy('createdAt', 'desc')),
-        [user.uid]
+        user ? query(collection(db, `users/${user.uid}/trips`), orderBy('createdAt', 'desc')) : null,
+        [user]
     );
     const employeesQuery = useMemo(() => 
-        query(collection(db, `users/${user.uid}/employees`), orderBy('createdAt', 'asc')),
-        [user.uid]
+        user ? query(collection(db, `users/${user.uid}/employees`), orderBy('createdAt', 'asc')) : null,
+        [user]
     );
     const locationsQuery = useMemo(() => 
-        query(collection(db, `users/${user.uid}/locations`), orderBy('createdAt', 'asc')),
-        [user.uid]
+        user ? query(collection(db, `users/${user.uid}/locations`), orderBy('createdAt', 'asc')) : null,
+        [user]
     );
     const activitiesQuery = useMemo(() => 
-        query(collection(db, `users/${user.uid}/activities`), orderBy('createdAt', 'asc')),
-        [user.uid]
+        user ? query(collection(db, `users/${user.uid}/activities`), orderBy('createdAt', 'asc')) : null,
+        [user]
     );
 
     // Passe as queries memoizadas para useCollection
@@ -92,39 +93,46 @@ export const AppContent = ({ user }) => {
     const handleAddItem = async (collectionName, name) => {
         if (!user || !name || isSubmitting) return;
         setIsSubmitting(true);
-        // [DEBUG] Log para ver o que está sendo adicionado
         console.log(`[DEBUG - handleAddItem] Tentando adicionar "${name}" à coleção: users/${user.uid}/${collectionName}`);
         try {
             const collRef = collection(db, "users", user.uid, collectionName);
             const data = { name, createdAt: serverTimestamp() };
             const docRef = await addDoc(collRef, data);
             toast.success(`"${name}" adicionado com sucesso!`);
-            // [DEBUG] Log para confirmar o sucesso da adição
             console.log(`[DEBUG - handleAddItem] Sucesso! Documento adicionado com ID: ${docRef.id}, em coleção: users/${user.uid}/${collectionName}`);
         } catch (error) {
             toast.error("Falha ao adicionar item.");
-            // [DEBUG] Log para capturar erros na adição
             console.error(`[DEBUG - handleAddItem] Erro ao adicionar item:`, error);
         } finally {
             setIsSubmitting(false);
         }
     };
 
-    const confirmDeleteItem = (collectionName, id) => {
-        setDeletingInfo({ collectionName, id });
+    const confirmDeleteItem = (collectionName, id, receiptPath = null) => {
+        setDeletingInfo({ collectionName, id, receiptPath });
         setIsDeleteModalOpen(true);
     };
 
     const handleDeleteItem = async () => {
         if (!user || !deletingInfo) return;
-        const { collectionName, id } = deletingInfo;
+        const { collectionName, id, receiptPath } = deletingInfo;
         setIsDeleteModalOpen(false);
         setDeletingInfo(null);
         try {
+            // Apagar o documento do Firestore
             await deleteDoc(doc(db, "users", user.uid, collectionName, id));
+            
+            // Se houver um recibo associado, apagar do Storage
+            if (receiptPath) {
+                const fileRef = ref(storage, receiptPath);
+                await deleteObject(fileRef);
+                console.log(`Recibo ${receiptPath} apagado do Storage.`);
+            }
+
             toast.success("Item apagado com sucesso!");
         } catch (error) {
             toast.error("Falha ao apagar o registro.");
+            console.error("Erro ao apagar item:", error);
         }
     };
 
@@ -152,6 +160,7 @@ export const AppContent = ({ user }) => {
             setTimeForm({ employee: '', date: new Date().toISOString().split('T')[0], startTime: '', endTime: '', location: '', activity: '' });
         } catch (error) {
             toast.error("Falha ao adicionar registro.");
+            console.error("Erro ao adicionar registro de horas:", error);
         } finally {
             setIsSubmitting(false);
         }
@@ -161,15 +170,27 @@ export const AppContent = ({ user }) => {
         if (isSubmitting) return;
         setIsSubmitting(true);
         try {
+            const expensesWithReceipts = await Promise.all(tripData.expenses.map(async (exp) => {
+                if (exp.receipt) {
+                    const storageRef = ref(storage, `expense_receipts/${user.uid}/${Date.now()}_${exp.receipt.name}`);
+                    await uploadBytes(storageRef, exp.receipt);
+                    const downloadURL = await getDownloadURL(storageRef);
+                    return { ...exp, receiptURL: downloadURL, receiptPath: storageRef.fullPath };
+                }
+                return exp;
+            }));
+
             const data = {
                 ...tripData,
                 totalCost: tripData.distance * COST_PER_KM,
+                expenses: expensesWithReceipts.map(({ receipt, ...rest }) => rest), // Remove o objeto File antes de salvar
                 createdAt: serverTimestamp()
             };
             await addDoc(collection(db, "users", user.uid, 'trips'), data);
             toast.success("Registro de viagem adicionado!");
         } catch (error) {
             toast.error("Falha ao adicionar registro de viagem.");
+            console.error("Erro ao adicionar registro de viagem:", error);
         } finally {
             setIsSubmitting(false);
         }
@@ -183,7 +204,7 @@ export const AppContent = ({ user }) => {
     };
 
     const handleUpdateRecord = async (updatedRecord) => { 
-        if (isSubmitting) return;
+        if (!user || isSubmitting) return;
         setIsSubmitting(true);
         setIsEditModalOpen(false);
         setEditingRecord(null); 
@@ -206,8 +227,27 @@ export const AppContent = ({ user }) => {
                 dataToUpdate = { ...dataToUpdate, durationInHours, totalCost };
             } else if (type === 'viagens') {
                 collectionName = 'trips';
+                // Garante que startKm e endKm são números antes de salvar
                 dataToUpdate.startKm = dataToUpdate.startKm ? parseFloat(dataToUpdate.startKm) : null;
                 dataToUpdate.endKm = dataToUpdate.endKm ? parseFloat(dataToUpdate.endKm) : null;
+                dataToUpdate.distance = dataToUpdate.distance ? parseFloat(dataToUpdate.distance) : 0; // Atualiza a distância também
+                dataToUpdate.totalCost = dataToUpdate.distance * COST_PER_KM; // Recalcula o custo total da viagem
+
+                // Lógica para despesas:
+                // 1. Processar novos recibos (se houver)
+                const expensesWithProcessedReceipts = await Promise.all(dataToUpdate.expenses.map(async (exp) => {
+                    // Se a despesa tem um 'receipt' (objeto File), significa que é um novo upload
+                    if (exp.receipt && typeof exp.receipt === 'object') {
+                        const storageRef = ref(storage, `expense_receipts/${user.uid}/${id}/${Date.now()}_${exp.receipt.name}`);
+                        await uploadBytes(storageRef, exp.receipt);
+                        const downloadURL = await getDownloadURL(storageRef);
+                        return { ...exp, receiptURL: downloadURL, receiptPath: storageRef.fullPath };
+                    }
+                    // Se não tem 'receipt' ou já é uma URL, mantém como está
+                    return exp;
+                }));
+                // Remove o objeto File antes de salvar no Firestore
+                dataToUpdate.expenses = expensesWithProcessedReceipts.map(({ receipt, ...rest }) => rest); 
             }
 
             const docRef = doc(db, "users", user.uid, collectionName, id);
@@ -274,21 +314,13 @@ export const AppContent = ({ user }) => {
                                         onAddTrip={handleAddTripEntry} 
                                         isSubmitting={isSubmitting} 
                                     />
-                                    <TripLogList logs={tripLogs} isLoading={isLoadingTrips} onEdit={(record) => handleOpenEditModal(record, 'viagens')} onDelete={(id) => confirmDeleteItem('trips', id)} />
+                                    <TripLogList logs={tripLogs} isLoading={isLoadingTrips} onEdit={(record) => handleOpenEditModal(record, 'viagens')} onDelete={(id, receiptPath) => confirmDeleteItem('trips', id, receiptPath)} />
                                 </div>
                             )}
                         </div>
                         <div className="lg:col-span-3 space-y-6">
-                            {/* [DEBUG] Log para ver o conteúdo de 'employees' antes de passar para ManagementSection */}
-                            {console.log("[DEBUG - ManagementSection - Employees]:", employees)}
                             <ManagementSection title="Funcionários" icon={Users} items={employees} isLoading={isLoadingEmployees} onAddItem={(name) => handleAddItem('employees', name)} onDeleteItem={(id) => confirmDeleteItem('employees', id)} />
-
-                            {/* [DEBUG] Log para ver o conteúdo de 'locations' antes de passar para ManagementSection */}
-                            {console.log("[DEBUG - ManagementSection - Locations]:", locations)}
                             <ManagementSection title="Locais" icon={MapPin} items={locations} isLoading={isLoadingLocations} onAddItem={(name) => handleAddItem('locations', name)} onDeleteItem={(id) => confirmDeleteItem('locations', id)} usePlacesAutocomplete={true} />
-                            
-                            {/* [DEBUG] Log para ver o conteúdo de 'activities' antes de passar para ManagementSection */}
-                            {console.log("[DEBUG - ManagementSection - Activities]:", activities)}
                             <ManagementSection title="Atividades" icon={ClipboardList} items={activities} isLoading={isLoadingActivities} onAddItem={(name) => handleAddItem('activities', name)} onDeleteItem={(id) => confirmDeleteItem('activities', id)} />
                         </div>
                     </div>
@@ -304,13 +336,15 @@ export const AppContent = ({ user }) => {
                 <Modal isOpen={isEditModalOpen} onClose={() => setIsEditModalOpen(false)} title={`Editar Registro de ${editingRecord?.type === 'horas' ? 'Horas' : 'Viagem'}`}>
                     {/* Renderiza o formulário de horas ou o TripForm para edição */}
                     {editingRecord?.type === 'horas' && (
-                        <form onSubmit={(e) => handleUpdateRecord(e, 'horas')} className="space-y-4"> 
+                        <form onSubmit={(e) => { e.preventDefault(); handleUpdateRecord(editingRecord); }} className="space-y-4"> 
                             <div className="grid grid-cols-2 gap-4">
                                 <div><label>Funcionário</label><select value={editingRecord.employee} onChange={e => setEditingRecord({...editingRecord, employee: e.target.value})} required className="w-full mt-1 p-2 border dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700"><option value="" disabled>Selecione</option>{(employees || []).map(e => <option key={e.id} value={e.name}>{e.name}</option>)}</select></div>
                                 <div><label>Data</label><input type="date" value={editingRecord.date} onChange={e => setEditingRecord({...editingRecord, date: e.target.value})} required className="w-full mt-1 p-2 border dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700"/></div>
                                 <div><label>Hora Início</label><input type="time" value={editingRecord.startTime} onChange={e => setEditingRecord({...editingRecord, startTime: e.target.value})} required className="w-full mt-1 p-2 border dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700"/></div>
                                 <div><label>Hora Fim</label><input type="time" value={editingRecord.endTime} onChange={e => setEditingRecord({...editingRecord, endTime: e.target.value})} required className="w-full mt-1 p-2 border dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700"/></div>
                             </div>
+                            <div><label>Local</label><select value={editingRecord.location} onChange={e => setEditingRecord({...editingRecord, location: e.target.value})} required className="w-full mt-1 p-2 border dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700"><option value="" disabled>Selecione</option>{(locations || []).map(l => <option key={l.id} value={l.name}>{l.name}</option>)}</select></div>
+                            <div><label>Atividade</label><select value={editingRecord.activity} onChange={e => setEditingRecord({...editingRecord, activity: e.target.value})} required className="w-full mt-1 p-2 border dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700"><option value="" disabled>Selecione</option>{(activities || []).map(a => <option key={a.id} value={a.name}>{a.name}</option>)}</select></div>
                             <div className="flex justify-end gap-4 mt-6">
                                 <button type="button" onClick={() => setIsEditModalOpen(false)} className="px-4 py-2 rounded-lg bg-slate-200 dark:bg-slate-600">Cancelar</button>
                                 <button type="submit" disabled={isSubmitting} className="px-4 py-2 rounded-lg bg-blue-600 text-white flex items-center justify-center disabled:bg-blue-400">
@@ -322,8 +356,8 @@ export const AppContent = ({ user }) => {
                     {editingRecord?.type === 'viagens' && (
                         <TripForm 
                             employees={employees || []} 
-                            initialData={editingRecord} 
-                            onUpdateTrip={handleUpdateRecord} 
+                            initialData={editingRecord} // Passa os dados para preencher o formulário
+                            onUpdateTrip={handleUpdateRecord} // Passa a função de atualização
                             isSubmitting={isSubmitting} 
                         />
                     )}

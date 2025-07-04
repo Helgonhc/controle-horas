@@ -1,50 +1,62 @@
-// Local do arquivo: src/hooks/useCollection.js
-import { useEffect, useState } from 'react';
-import { db } from '../firebase/config';
-import { collection, onSnapshot, query as firestoreQueryBuilder } from 'firebase/firestore'; 
+import { useState, useEffect, useRef } from 'react';
+import { onSnapshot, collection, query as firestoreQuery, orderBy } from 'firebase/firestore';
+import { db } from '../firebase/config'; // Certifique-se de que 'db' está sendo importado corretamente
 
-export const useCollection = (colPath, firestoreQuery = null) => { 
+export const useCollection = (collectionName, queryRef = null) => {
     const [documents, setDocuments] = useState(null);
     const [error, setError] = useState(null);
     const [isLoading, setIsLoading] = useState(true);
 
-    useEffect(() => {
-        setIsLoading(true);
-        setError(null); 
+    // Usamos useRef para armazenar a query, garantindo que ela não cause re-renderizações desnecessárias
+    // e que o useEffect possa reagir a mudanças reais na query.
+    // O JSON.stringify é uma forma simples de comparar objetos de query para saber se mudaram.
+    const queryRefString = JSON.stringify(queryRef?.converter ? queryRef.converter : queryRef);
+    const queryRefMemo = useRef(queryRefString);
 
-        let ref;
-        if (firestoreQuery) {
-            // Se uma query Firestore já foi construída e passada (usando query(), collection(), orderBy(), etc.)
-            ref = firestoreQuery; 
-        } else if (colPath) {
-            // Caso contrário, se apenas o caminho da coleção foi passado
-            ref = collection(db, colPath);
+    useEffect(() => {
+        // Se a query mudou, atualiza a referência
+        if (queryRefString !== queryRefMemo.current) {
+            queryRefMemo.current = queryRefString;
+        }
+
+        let collectionRef;
+        if (queryRef) {
+            // Se uma query completa (como a gerada por 'query(collection(...), orderBy(...))') foi passada
+            collectionRef = queryRef;
+        } else if (collectionName) {
+            // Se apenas o nome da coleção foi passado, cria uma referência básica
+            collectionRef = collection(db, collectionName);
         } else {
-            // Se nenhum dos dois foi fornecido, algo está errado
-            console.error("useCollection: Caminho da coleção ou query Firestore deve ser fornecido.");
-            setError("Configuração de busca de dados inválida.");
+            setError('Nenhuma coleção ou query fornecida para useCollection.');
             setIsLoading(false);
             return;
         }
 
-        const unsubscribe = onSnapshot(ref, (snapshot) => {
-            let results = [];
+        setIsLoading(true);
+        setError(null);
+        setDocuments(null); // Limpa os documentos ao iniciar uma nova escuta
+
+        // Configura a escuta em tempo real
+        const unsubscribe = onSnapshot(collectionRef, (snapshot) => {
+            const results = [];
             snapshot.docs.forEach(doc => {
                 results.push({ ...doc.data(), id: doc.id });
             });
             setDocuments(results);
-            setError(null);
             setIsLoading(false);
+            setError(null);
         }, (err) => {
             console.error("Erro ao buscar coleção:", err);
-            setError('Não foi possível buscar os dados: ' + err.message);
+            setError(err.message);
             setIsLoading(false);
+            setDocuments([]); // Garante que a lista esteja vazia em caso de erro
         });
 
-        // Limpa o listener quando o componente é desmontado ou as dependências mudam
+        // Retorna a função de limpeza (unsubscribe)
+        // Esta função é executada quando o componente é desmontado ou quando as dependências do useEffect mudam
         return () => unsubscribe();
 
-    }, [colPath, firestoreQuery]); // Agora, firestoreQuery é uma dependência direta
+    }, [queryRefMemo]); // Dependência: a referência memoizada da query
 
     return { documents, error, isLoading };
 };
