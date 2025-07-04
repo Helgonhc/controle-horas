@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { db, auth, storage } from '../firebase/config'; // Importe 'storage'
+import { db, auth, storage } from '../firebase/config';
 import { collection, addDoc, serverTimestamp, doc, deleteDoc, updateDoc, query, orderBy } from 'firebase/firestore'; 
-import { ref, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage'; // Importe funções do Storage
+import { ref, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage';
 import { toast } from 'react-toastify';
 
 // Nossos componentes
@@ -267,7 +267,8 @@ export const AppContent = ({ user }) => {
                 <header className="mb-8 text-center relative">
                     <h1 className="text-3xl sm:text-4xl font-bold text-slate-900 dark:text-white">Controle de Horas e Viagens</h1>
                     <p className="text-lg text-slate-600 dark:text-slate-400 mt-1">AeC Serviços Especializados</p>
-                    <div className="absolute top-0 right-0 flex items-center gap-4">
+                    {/* Botões de Tema e Sair para mobile e desktop */}
+                    <div className="absolute top-0 right-0 flex items-center gap-2 sm:gap-4 p-2 sm:p-0"> {/* Adicionado p-2 sm:p-0 para espaçamento responsivo */}
                         <button onClick={() => setTheme(theme === 'light' ? 'dark' : 'light')} className="p-2 rounded-full bg-slate-200 dark:bg-slate-700">
                             {theme === 'light' ? <Moon /> : <Sun className="text-yellow-300" />}
                         </button>
@@ -275,7 +276,8 @@ export const AppContent = ({ user }) => {
                     </div>
                 </header>
 
-                <div className="flex justify-center mb-8 gap-2 sm:gap-4">
+                {/* Botões de Navegação Principal: Layout responsivo */}
+                <div className="flex flex-col sm:flex-row justify-center mb-8 gap-2 sm:gap-4"> {/* flex-col para mobile, flex-row para sm e acima */}
                     <button onClick={() => setCurrentView('dashboard')} className={`px-4 py-2 font-semibold rounded-lg ${currentView === 'dashboard' ? 'bg-purple-600 text-white' : 'bg-white dark:bg-slate-700'}`}><BarChart2 className="inline mr-2" />Dashboard</button>
                     <button onClick={() => setCurrentView('horas')} className={`px-4 py-2 font-semibold rounded-lg ${currentView === 'horas' ? 'bg-blue-600 text-white' : 'bg-white dark:bg-slate-700'}`}><Clock className="inline mr-2" />Horas</button>
                     <button onClick={() => setCurrentView('viagens')} className={`px-4 py-2 font-semibold rounded-lg ${currentView === 'viagens' ? 'bg-green-600 text-white' : 'bg-white dark:bg-slate-700'}`}><Car className="inline mr-2" />Viagens</button>
@@ -284,14 +286,14 @@ export const AppContent = ({ user }) => {
                 {currentView === 'dashboard' && <Dashboard chartData={chartData} />}
 
                 {currentView !== 'dashboard' && (
-                    <div className="grid grid-cols-1 lg:grid-cols-5 gap-8">
-                        <div className="lg:col-span-2 space-y-8">
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4 md:gap-6 lg:gap-8"> {/* Grid responsiva principal */}
+                        <div className="md:col-span-1 lg:col-span-2 space-y-4 md:space-y-6 lg:space-y-8"> {/* Colunas para formulário/listas principais */}
                             {currentView === 'horas' && (
                                 <div>
-                                    <div className="bg-white dark:bg-slate-800 p-6 rounded-xl shadow-lg">
+                                    <div className="bg-white dark:bg-slate-800 p-4 sm:p-6 rounded-xl shadow-lg"> {/* Padding responsivo */}
                                         <h2 className="text-xl font-bold mb-4 flex items-center"><PlusCircle className="mr-2 text-blue-500" /> Adicionar Registro de Horas</h2>
                                         <form onSubmit={handleAddTimeEntry} className="space-y-4">
-                                            <div className="grid grid-cols-2 gap-4">
+                                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4"> {/* Grid responsiva para campos de horas */}
                                                 <div><label>Funcionário</label><select value={timeForm.employee} onChange={e => setTimeForm({ ...timeForm, employee: e.target.value })} required className="w-full mt-1 p-2 border dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700"><option value="" disabled>Selecione</option>{(employees || []).map(e => <option key={e.id} value={e.name}>{e.name}</option>)}</select></div>
                                                 <div><label>Data</label><input type="date" value={timeForm.date} onChange={e => setTimeForm({ ...timeForm, date: e.target.value })} required className="w-full mt-1 p-2 border dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700" /></div>
                                                 <div><label>Hora Início</label><input type="time" value={timeForm.startTime} onChange={e => setTimeForm({ ...timeForm, startTime: e.target.value })} required className="w-full mt-1 p-2 border dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700" /></div>
@@ -318,7 +320,7 @@ export const AppContent = ({ user }) => {
                                 </div>
                             )}
                         </div>
-                        <div className="lg:col-span-3 space-y-6">
+                        <div className="md:col-span-1 lg:col-span-3 space-y-4 md:space-y-6 lg:space-y-8"> {/* Colunas para seções de gerenciamento */}
                             <ManagementSection title="Funcionários" icon={Users} items={employees} isLoading={isLoadingEmployees} onAddItem={(name) => handleAddItem('employees', name)} onDeleteItem={(id) => confirmDeleteItem('employees', id)} />
                             <ManagementSection title="Locais" icon={MapPin} items={locations} isLoading={isLoadingLocations} onAddItem={(name) => handleAddItem('locations', name)} onDeleteItem={(id) => confirmDeleteItem('locations', id)} usePlacesAutocomplete={true} />
                             <ManagementSection title="Atividades" icon={ClipboardList} items={activities} isLoading={isLoadingActivities} onAddItem={(name) => handleAddItem('activities', name)} onDeleteItem={(id) => confirmDeleteItem('activities', id)} />
@@ -337,7 +339,7 @@ export const AppContent = ({ user }) => {
                     {/* Renderiza o formulário de horas ou o TripForm para edição */}
                     {editingRecord?.type === 'horas' && (
                         <form onSubmit={(e) => { e.preventDefault(); handleUpdateRecord(editingRecord); }} className="space-y-4"> 
-                            <div className="grid grid-cols-2 gap-4">
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4"> {/* Grid responsiva para campos de edição de horas */}
                                 <div><label>Funcionário</label><select value={editingRecord.employee} onChange={e => setEditingRecord({...editingRecord, employee: e.target.value})} required className="w-full mt-1 p-2 border dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700"><option value="" disabled>Selecione</option>{(employees || []).map(e => <option key={e.id} value={e.name}>{e.name}</option>)}</select></div>
                                 <div><label>Data</label><input type="date" value={editingRecord.date} onChange={e => setEditingRecord({...editingRecord, date: e.target.value})} required className="w-full mt-1 p-2 border dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700"/></div>
                                 <div><label>Hora Início</label><input type="time" value={editingRecord.startTime} onChange={e => setEditingRecord({...editingRecord, startTime: e.target.value})} required className="w-full mt-1 p-2 border dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700"/></div>
@@ -356,8 +358,8 @@ export const AppContent = ({ user }) => {
                     {editingRecord?.type === 'viagens' && (
                         <TripForm 
                             employees={employees || []} 
-                            initialData={editingRecord} // Passa os dados para preencher o formulário
-                            onUpdateTrip={handleUpdateRecord} // Passa a função de atualização
+                            initialData={editingRecord} 
+                            onUpdateTrip={handleUpdateRecord} 
                             isSubmitting={isSubmitting} 
                         />
                     )}

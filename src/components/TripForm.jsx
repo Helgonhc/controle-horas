@@ -1,15 +1,17 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react'; // <-- CORRIGIDO AQUI: use 'from' em vez de '=>'
 import { useJsApiLoader, GoogleMap, Polyline, Marker } from '@react-google-maps/api';
 import PlacesAutocomplete, { geocodeByAddress, getLatLng } from 'react-places-autocomplete';
 import { toast } from 'react-toastify';
-// Ícones: Adicionado 'Download' aqui
 import { LoaderCircle, MapPin, PlusCircle, Route, Edit, Car, Calendar, DollarSign, Text, Download } from 'lucide-react'; 
+
+// Mova a declaração das libraries para FORA do componente TripForm
+const GOOGLE_MAPS_LIBRARIES_TRIPFORM = ['places']; 
 
 const mapContainerStyle = {
     width: '100%',
-    height: '300px',
+    height: '300px', // Altura do mapa
     borderRadius: '8px',
-    marginBottom: '1rem',
+    marginBottom: '1rem', 
 };
 
 const center = { lat: -23.55052, lng: -46.633308 }; // São Paulo, Brazil as default
@@ -22,26 +24,24 @@ export const TripForm = ({ employees, onAddTrip, onUpdateTrip, isSubmitting, ini
     const [startKm, setStartKm] = useState(initialData?.startKm || '');
     const [endKm, setEndKm] = useState(initialData?.endKm || '');
     const [distance, setDistance] = useState(initialData?.distance || 0);
-    const [totalCost, setTotalCost] = useState(initialData?.totalCost || 0); // Adicionado para exibir custo total
-    const [notes, setNotes] = useState(initialData?.notes || ''); // Adicionado para observações
+    const [totalCost, setTotalCost] = useState(initialData?.totalCost || 0);
+    const [notes, setNotes] = useState(initialData?.notes || '');
 
     const [map, setMap] = useState(null);
     const [directions, setDirections] = useState(null);
-    const [originLatLng, setOriginLatLng] = useState(initialData?.originLatLng || null); // Carrega do initialData
-    const [destinationLatLng, setDestinationLatLng] = useState(initialData?.destinationLatLng || null); // Carrega do initialData
+    const [originLatLng, setOriginLatLng] = useState(initialData?.originLatLng || null);
+    const [destinationLatLng, setDestinationLatLng] = useState(initialData?.destinationLatLng || null);
 
-    // Estado para despesas
     const [expenseDescription, setExpenseDescription] = useState('');
     const [expenseAmount, setExpenseAmount] = useState('');
-    const [expenseFile, setExpenseFile] = useState(null); // Para o arquivo de recibo
-    const [expenses, setExpenses] = useState(initialData?.expenses || []); // Para armazenar múltiplas despesas
+    const [expenseFile, setExpenseFile] = useState(null);
+    const [expenses, setExpenses] = useState(initialData?.expenses || []);
 
     const { isLoaded, loadError } = useJsApiLoader({
-        googleMapsApiKey: process.env.REACT_APP_Maps_API_KEY, // A chave correta
-        libraries: ['places'],
+        googleMapsApiKey: process.env.REACT_APP_GOOGLE_MAPS_API_KEY, 
+        libraries: GOOGLE_MAPS_LIBRARIES_TRIPFORM, 
     });
 
-    // Efeito para preencher o formulário e carregar o mapa em modo de edição
     useEffect(() => {
         if (initialData) {
             setDriver(initialData.driver || '');
@@ -53,7 +53,7 @@ export const TripForm = ({ employees, onAddTrip, onUpdateTrip, isSubmitting, ini
             setDistance(initialData.distance || 0);
             setTotalCost(initialData.totalCost || 0);
             setNotes(initialData.notes || '');
-            setExpenses(initialData.expenses || []); // Carrega despesas existentes
+            setExpenses(initialData.expenses || []);
 
             setOriginLatLng(initialData.originLatLng || null);
             setDestinationLatLng(initialData.destinationLatLng || null);
@@ -61,7 +61,6 @@ export const TripForm = ({ employees, onAddTrip, onUpdateTrip, isSubmitting, ini
                 calculateAndDisplayRoute(initialData.originLatLng, initialData.destinationLatLng);
             }
         } else {
-            // Reseta o formulário para o modo de adição
             setDriver('');
             setDate(new Date().toISOString().split('T')[0]);
             setOrigin('');
@@ -79,10 +78,10 @@ export const TripForm = ({ employees, onAddTrip, onUpdateTrip, isSubmitting, ini
             setDestinationLatLng(null);
             setDirections(null);
         }
-    }, [initialData, isLoaded]); // Depende de isLoaded para tentar carregar rota no initData
+    }, [initialData, isLoaded]);
 
     const calculateAndDisplayRoute = (originLoc, destLoc) => {
-        if (!originLoc || !destLoc || !isLoaded) return; // Garante que o Maps API está carregado
+        if (!originLoc || !destLoc || !isLoaded) return;
 
         const directionsService = new window.google.maps.DirectionsService();
         directionsService.route(
@@ -95,10 +94,10 @@ export const TripForm = ({ employees, onAddTrip, onUpdateTrip, isSubmitting, ini
                 if (status === window.google.maps.DirectionsStatus.OK) {
                     setDirections(result);
                     const route = result.routes[0].legs[0];
-                    const calculatedDistance = route.distance.value / 1000; // em km
+                    const calculatedDistance = route.distance.value / 1000;
                     setDistance(calculatedDistance);
-                    setTotalCost(calculatedDistance * 0.50); // Custo estimado por KM
-                    setStartKm(''); // Limpa KMs se a rota for pelo mapa
+                    setTotalCost(calculatedDistance * 0.50);
+                    setStartKm('');
                     setEndKm('');
                 } else {
                     toast.error(`Erro ao calcular rota: ${status}`);
@@ -110,26 +109,23 @@ export const TripForm = ({ employees, onAddTrip, onUpdateTrip, isSubmitting, ini
         );
     };
 
-    // Efeito para calcular a distância e custo total baseado em KM inicial/final
     useEffect(() => {
         const skm = parseFloat(startKm);
         const ekm = parseFloat(endKm);
         if (!isNaN(skm) && !isNaN(ekm) && ekm >= skm) {
             const calculatedDistance = ekm - skm;
             setDistance(calculatedDistance);
-            setTotalCost(calculatedDistance * 0.50); // Custo estimado por KM
-            setDirections(null); // Limpa as direções do mapa se usar KMs
+            setTotalCost(calculatedDistance * 0.50);
+            setDirections(null);
             setOriginLatLng(null);
             setDestinationLatLng(null);
-        } else if (isNaN(skm) || isNaN(ekm)) { // Se um dos KMs não for número
-            // Apenas zera se ambos os KMs são inválidos e não há coordenadas no mapa
+        } else if (isNaN(skm) || isNaN(ekm)) {
             if (!originLatLng && !destinationLatLng) {
                 setDistance(0);
                 setTotalCost(0);
             }
         }
-    }, [startKm, endKm, originLatLng, destinationLatLng]); // Depende das coords para evitar conflito com mapa
-
+    }, [startKm, endKm, originLatLng, destinationLatLng]);
 
     const handleSelectOrigin = async (address) => {
         setOrigin(address);
@@ -137,7 +133,7 @@ export const TripForm = ({ employees, onAddTrip, onUpdateTrip, isSubmitting, ini
             const results = await geocodeByAddress(address);
             const latLng = await getLatLng(results[0]);
             setOriginLatLng(latLng);
-            if (destinationLatLng && isLoaded) { // Só calcula se destino e Maps API carregado
+            if (destinationLatLng && isLoaded) {
                 calculateAndDisplayRoute(latLng, destinationLatLng);
             }
         } catch (error) {
@@ -154,7 +150,7 @@ export const TripForm = ({ employees, onAddTrip, onUpdateTrip, isSubmitting, ini
             const results = await geocodeByAddress(address);
             const latLng = await getLatLng(results[0]);
             setDestinationLatLng(latLng);
-            if (originLatLng && isLoaded) { // Só calcula se origem e Maps API carregado
+            if (originLatLng && isLoaded) {
                 calculateAndDisplayRoute(originLatLng, latLng);
             }
         } catch (error) {
@@ -168,15 +164,15 @@ export const TripForm = ({ employees, onAddTrip, onUpdateTrip, isSubmitting, ini
     const handleAddExpense = () => {
         if (expenseDescription && expenseAmount && parseFloat(expenseAmount) > 0) {
             const newExpense = {
-                id: Date.now(), // ID único para a despesa (para remoção)
+                id: Date.now(),
                 description: expenseDescription,
                 amount: parseFloat(expenseAmount),
-                receipt: expenseFile // O objeto File em si
+                receipt: expenseFile
             };
             setExpenses(prev => [...prev, newExpense]);
             setExpenseDescription('');
             setExpenseAmount('');
-            setExpenseFile(null); // Limpa o campo de arquivo após adicionar
+            setExpenseFile(null);
             toast.success('Despesa adicionada à lista!');
         } else {
             toast.warn('Por favor, preencha a descrição e o valor da despesa.');
@@ -191,7 +187,6 @@ export const TripForm = ({ employees, onAddTrip, onUpdateTrip, isSubmitting, ini
     const handleSubmit = async (e) => {
         e.preventDefault();
 
-        // Validação: Motorista, Data e (Origem/Destino OU KM Inicial/Final)
         const isKmValid = startKm !== '' && endKm !== '' && parseFloat(startKm) >= 0 && parseFloat(endKm) >= 0;
         const isMapValid = originLatLng && destinationLatLng && origin && destination;
 
@@ -200,10 +195,6 @@ export const TripForm = ({ employees, onAddTrip, onUpdateTrip, isSubmitting, ini
             return;
         }
         
-        // Se usar KM, a distância já está calculada no useEffect
-        // Se usar mapa, a distância já está calculada no calculateAndDisplayRoute
-        // Se ambos, a prioridade é dada ao último que foi preenchido/calculado
-
         const tripData = {
             driver,
             date,
@@ -214,9 +205,9 @@ export const TripForm = ({ employees, onAddTrip, onUpdateTrip, isSubmitting, ini
             distance: parseFloat(distance.toFixed(1)),
             totalCost: parseFloat(totalCost.toFixed(2)),
             notes,
-            originLatLng: originLatLng, // Salva as coordenadas
-            destinationLatLng: destinationLatLng, // Salva as coordenadas
-            expenses: expenses // Inclui as despesas adicionadas localmente
+            originLatLng: originLatLng,
+            destinationLatLng: destinationLatLng,
+            expenses: expenses
         };
 
         if (initialData) {
@@ -231,13 +222,15 @@ export const TripForm = ({ employees, onAddTrip, onUpdateTrip, isSubmitting, ini
     }
 
     return (
-        <div className="bg-white dark:bg-slate-800 p-6 rounded-xl shadow-lg mb-8">
-            <h2 className="text-xl font-bold mb-4 flex items-center">
+        // Contêiner principal do formulário, permitindo que ele preencha a largura do modal
+        <div className="bg-white dark:bg-slate-800 p-6 rounded-xl shadow-lg w-full"> 
+            <h2 className="text-2xl font-bold mb-4 flex items-center">
                 {initialData ? <Edit className="mr-2 text-purple-500" /> : <PlusCircle className="mr-2 text-green-500" />}
                 {initialData ? 'Editar Registro de Viagem' : 'Adicionar Nova Viagem'}
             </h2>
-            <form onSubmit={handleSubmit} className="space-y-4">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <form onSubmit={handleSubmit} className="space-y-4"> 
+                {/* Campos Driver e Data: Duas Colunas */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4"> 
                     <div>
                         <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1 flex items-center"><Car size={16} className="mr-2" /> Motorista</label>
                         <select
@@ -264,7 +257,8 @@ export const TripForm = ({ employees, onAddTrip, onUpdateTrip, isSubmitting, ini
                     </div>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {/* Campos Origem e Destino: Duas Colunas */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4"> 
                     <div>
                         <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1 flex items-center"><MapPin size={16} className="mr-2" /> Origem</label>
                         <PlacesAutocomplete
