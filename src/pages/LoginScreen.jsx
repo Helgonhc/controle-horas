@@ -1,10 +1,10 @@
 import React, { useState } from 'react';
 import { getAuth, signInWithEmailAndPassword, sendPasswordResetEmail } from 'firebase/auth';
 import { toast } from 'react-toastify';
-import { LogIn, Mail, Lock, ShieldCheck } from 'lucide-react';
+import { LogIn, Mail, Lock } from 'lucide-react';
 
-// Importe sua imagem de logo aqui (exemplo):
-// import logo from '../../assets/sua-logo.png';
+// Certifique-se que sua logo transparente está em 'src/assets/logo-aec-transparente.png'
+import logoAec from '../assets/logo-aec-transparente.png';
 
 export const LoginScreen = () => {
     const [email, setEmail] = useState('');
@@ -43,16 +43,19 @@ export const LoginScreen = () => {
         <div className="min-h-screen bg-gray-100 text-gray-900 flex justify-center">
             <div className="max-w-screen-xl m-0 sm:m-10 bg-white shadow sm:rounded-lg flex justify-center flex-1">
                 
-                {/* Painel da Esquerda (Branding) */}
                 <div className="lg:w-1/2 xl:w-5/12 p-6 sm:p-12 bg-gradient-to-tr from-blue-800 to-purple-700 text-white flex flex-col items-center justify-center">
                     <div className="text-center">
-                        {/* Se você tiver uma logomarca, pode colocar o <img> aqui no lugar do ícone */}
-                        <ShieldCheck className="w-24 h-24 mx-auto" />
+                        
+                        {/* AQUI ESTÁ A ALTERAÇÃO: Aumentamos a largura para w-80 e a margem inferior para mb-8 */}
+                        <img 
+                            src={logoAec} 
+                            alt="Logotipo AeC Serviços Especializados" 
+                            className="w-80 mx-auto mb-8" 
+                        />
 
-                        <h1 className="text-3xl font-bold mt-4">AeC Serviços Especializados</h1>
+                        <h1 className="text-3xl font-bold">AeC Serviços Especializados</h1>
                         <p className="mt-2 font-light">Gerenciamento inteligente para sua equipe.</p>
                         
-                        {/* NOVO: Créditos do desenvolvedor */}
                         <div className="mt-12 text-xs text-indigo-200">
                             <p>Aplicativo desenvolvido por</p>
                             <p className="font-bold tracking-wider">Helgon Henrique</p>
@@ -60,7 +63,6 @@ export const LoginScreen = () => {
                     </div>
                 </div>
 
-                {/* Painel da Direita (Formulário) */}
                 <div className="lg:w-1/2 xl:w-7/12 p-6 sm:p-16 flex flex-col justify-center">
                     <div className="w-full max-w-md mx-auto">
                         <h2 className="text-3xl font-extrabold text-center text-gray-900">
