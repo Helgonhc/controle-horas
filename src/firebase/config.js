@@ -1,9 +1,8 @@
-// Local: src/firebase/config.js
-// Substitua todo o conteúdo por este:
-
+// Local do arquivo: src/firebase/config.js
 import { initializeApp } from "firebase/app";
 import { getAuth } from "firebase/auth";
 import { getFirestore } from "firebase/firestore";
+import { getStorage } from "firebase/storage";
 
 const firebaseConfig = {
   apiKey: process.env.REACT_APP_API_KEY,
@@ -15,7 +14,8 @@ const firebaseConfig = {
 };
 
 const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
+const db = getFirestore(app);
+const storage = getStorage(app);
 
-// Exporta os serviços que vamos usar
-export const auth = getAuth(app);
-export const db = getFirestore(app);
+export { auth, db, storage };

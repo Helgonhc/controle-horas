@@ -5,10 +5,13 @@ import { auth } from './firebase/config';
 import { onAuthStateChanged } from 'firebase/auth';
 import { AppContent } from './pages/AppContent';
 import { LoginScreen } from './pages/LoginScreen';
+import { TripDetails } from './pages/TripDetails'; // Importa a nova página
+
+// NOVO: Importações do React Router
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 
 import { ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
-
 import { useLoadScript } from '@react-google-maps/api';
 
 const libraries = ['places'];
@@ -40,21 +43,25 @@ function App() {
 
     return (
         <>
-            <ToastContainer
-                position="top-right"
-                autoClose={3000}
-                hideProgressBar={false}
-                newestOnTop={false}
-                closeOnClick
-                rtl={false}
-                pauseOnFocusLoss
-                draggable
-                pauseOnHover
-                theme="colored"
-            />
+            <ToastContainer position="top-right" autoClose={3000} hideProgressBar={false} newestOnTop={false} closeOnClick rtl={false} pauseOnFocusLoss draggable pauseOnHover theme="colored" />
             
-            {/* CORREÇÃO AQUI: Passando o 'user' como prop novamente */}
-            {user ? <AppContent user={user} /> : <LoginScreen />}
+            {/* NOVO: Sistema de Roteamento */}
+            <BrowserRouter>
+                <Routes>
+                    <Route
+                        path="/"
+                        element={user ? <AppContent user={user} /> : <Navigate to="/login" />}
+                    />
+                    <Route
+                        path="/login"
+                        element={!user ? <LoginScreen /> : <Navigate to="/" />}
+                    />
+                    <Route
+                        path="/viagem/:tripId"
+                        element={user ? <TripDetails user={user} /> : <Navigate to="/login" />}
+                    />
+                </Routes>
+            </BrowserRouter>
         </>
     );
 }

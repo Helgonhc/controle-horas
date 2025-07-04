@@ -1,34 +1,50 @@
-import { useState, useEffect } from 'react';
-import { collection, query, onSnapshot, orderBy } from 'firebase/firestore';
+// Local do arquivo: src/hooks/useCollection.js
+import { useEffect, useState } from 'react';
 import { db } from '../firebase/config';
+import { collection, onSnapshot, query as firestoreQueryBuilder } from 'firebase/firestore'; 
 
-export const useCollection = (collectionName, userId) => {
-    const [documents, setDocuments] = useState([]);
+export const useCollection = (colPath, firestoreQuery = null) => { 
+    const [documents, setDocuments] = useState(null);
+    const [error, setError] = useState(null);
     const [isLoading, setIsLoading] = useState(true);
 
     useEffect(() => {
-        if (!userId) {
-            setDocuments([]);
+        setIsLoading(true);
+        setError(null); 
+
+        let ref;
+        if (firestoreQuery) {
+            // Se uma query Firestore já foi construída e passada (usando query(), collection(), orderBy(), etc.)
+            ref = firestoreQuery; 
+        } else if (colPath) {
+            // Caso contrário, se apenas o caminho da coleção foi passado
+            ref = collection(db, colPath);
+        } else {
+            // Se nenhum dos dois foi fornecido, algo está errado
+            console.error("useCollection: Caminho da coleção ou query Firestore deve ser fornecido.");
+            setError("Configuração de busca de dados inválida.");
             setIsLoading(false);
             return;
-        };
+        }
 
-        setIsLoading(true);
-        const collRef = collection(db, "users", userId, collectionName);
-        const q = query(collRef, orderBy('createdAt', 'desc'));
-
-        const unsubscribe = onSnapshot(q, (snapshot) => {
-            const dataList = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-            setDocuments(dataList);
+        const unsubscribe = onSnapshot(ref, (snapshot) => {
+            let results = [];
+            snapshot.docs.forEach(doc => {
+                results.push({ ...doc.data(), id: doc.id });
+            });
+            setDocuments(results);
+            setError(null);
             setIsLoading(false);
-        }, (error) => {
-            console.error("Erro ao buscar coleção:", error);
+        }, (err) => {
+            console.error("Erro ao buscar coleção:", err);
+            setError('Não foi possível buscar os dados: ' + err.message);
             setIsLoading(false);
         });
 
+        // Limpa o listener quando o componente é desmontado ou as dependências mudam
         return () => unsubscribe();
 
-    }, [collectionName, userId]);
+    }, [colPath, firestoreQuery]); // Agora, firestoreQuery é uma dependência direta
 
-    return { documents, isLoading };
+    return { documents, error, isLoading };
 };
