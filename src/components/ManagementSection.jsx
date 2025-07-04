@@ -1,7 +1,7 @@
 // Local do arquivo: src/components/ManagementSection.jsx
 import React, { useState } from 'react';
 import { PlusCircle, Trash2, LoaderCircle } from 'lucide-react';
-import PlacesAutocomplete, { geocodeByAddress, getLatLng } from 'react-places-autocomplete'; // Certifique-se de que PlacesAutocomplete é importado se for usado
+import PlacesAutocomplete, { geocodeByAddress, getLatLng } from 'react-places-autocomplete'; 
 
 export const ManagementSection = ({ title, icon: Icon, items, isLoading, onAddItem, onDeleteItem, usePlacesAutocomplete = false }) => {
     const [newItemName, setNewItemName] = useState('');
@@ -33,13 +33,13 @@ export const ManagementSection = ({ title, icon: Icon, items, isLoading, onAddIt
     };
 
     return (
-        <div className="bg-white dark:bg-slate-800 p-6 rounded-xl shadow-lg">
-            <h2 className="text-xl font-bold mb-4 flex items-center text-slate-800 dark:text-slate-200">
+        <div className="bg-white dark:bg-slate-800 p-4 sm:p-6 rounded-xl shadow-lg"> {/* Padding responsivo: p-4 em mobile, p-6 em sm e acima */}
+            <h2 className="text-xl font-bold mb-3 sm:mb-4 flex items-center text-slate-800 dark:text-slate-200"> {/* Margem inferior responsiva */}
                 {Icon && <Icon className="mr-2 text-blue-500" />} {title}
             </h2>
 
             {/* Formulário para Adicionar Item */}
-            <form onSubmit={handleAddItem} className="mb-6 flex flex-col sm:flex-row gap-2">
+            <form onSubmit={handleAddItem} className="mb-4 sm:mb-6 flex flex-col sm:flex-row gap-2"> {/* Margem inferior responsiva */}
                 {usePlacesAutocomplete ? (
                     <PlacesAutocomplete
                         value={newItemName}
@@ -97,23 +97,20 @@ export const ManagementSection = ({ title, icon: Icon, items, isLoading, onAddIt
             {/* Lista de Itens */}
             {isLoading && <p className="text-center text-slate-500">Carregando {title.toLowerCase()}...</p>}
             
-            {/* --- CORREÇÃO AQUI --- */}
-            {/* Garante que items seja um array antes de tentar mapear */}
             {!isLoading && (!items || items.length === 0) ? (
                 <p className="text-center text-slate-500">Nenhum {title.slice(0, -1).toLowerCase()} cadastrado.</p>
             ) : (
-                <ul className="space-y-2">
-                    {(items || []).map(item => ( // Usa (items || []) para garantir que é um array
-                        <li key={item.id} className="flex justify-between items-center bg-slate-50 dark:bg-slate-700 p-3 rounded-lg shadow-sm text-slate-800 dark:text-slate-200">
-                            <span>{item.name}</span>
-                            <button onClick={() => onDeleteItem(item.id)} className="text-red-500 hover:text-red-700 transition-colors">
+                <ul className="space-y-1 sm:space-y-2"> {/* Espaçamento vertical responsivo entre os itens da lista */}
+                    {(items || []).map(item => (
+                        <li key={item.id} className="flex justify-between items-center bg-slate-50 dark:bg-slate-700 p-2 sm:p-3 rounded-lg shadow-sm text-slate-800 dark:text-slate-200"> {/* Padding responsivo para o item da lista */}
+                            <span className="text-sm sm:text-base">{item.name}</span> {/* Tamanho da fonte responsivo */}
+                            <button onClick={() => onDeleteItem(item.id)} className="text-red-500 hover:text-red-700 transition-colors p-1 -m-1 rounded-md"> {/* Adicionado padding e margem negativa para área de clique */}
                                 <Trash2 size={18} />
                             </button>
                         </li>
                     ))}
                 </ul>
             )}
-            {/* --- FIM DA CORREÇÃO --- */}
         </div>
     );
 };
