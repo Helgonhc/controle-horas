@@ -14,7 +14,7 @@ import { Dashboard } from './Dashboard';
 import { TripForm } from '../components/TripForm'; 
 
 // Ícones
-import { Clock, PlusCircle, MapPin, ClipboardList, Car, Users, Route, Edit, Sun, Moon, BarChart2, LoaderCircle } from 'lucide-react';
+import { Clock, PlusCircle, MapPin, ClipboardList, Car, Users, Route, Edit, Sun, Moon, BarChart2, LoaderCircle, DollarSign } from 'lucide-react'; // Adicionado DollarSign
 
 const COST_PER_KM = 0.50;
 
@@ -51,6 +51,12 @@ export const AppContent = ({ user }) => {
         user ? query(collection(db, `users/${user.uid}/activities`), orderBy('createdAt', 'asc')) : null,
         [user]
     );
+    // --- NOVO: Query para Tipos de Despesa ---
+    const expenseTypesQuery = useMemo(() =>
+        user ? query(collection(db, `users/${user.uid}/expense_types`), orderBy('createdAt', 'asc')) : null,
+        [user]
+    );
+    // --- FIM NOVO ---
 
     // Passe as queries memoizadas para useCollection
     const { documents: timeLogs, isLoading: isLoadingTime } = useCollection(null, timeEntriesQuery); 
@@ -58,6 +64,9 @@ export const AppContent = ({ user }) => {
     const { documents: employees, isLoading: isLoadingEmployees } = useCollection(null, employeesQuery);
     const { documents: locations, isLoading: isLoadingLocations } = useCollection(null, locationsQuery);
     const { documents: activities, isLoading: isLoadingActivities } = useCollection(null, activitiesQuery);
+    // --- NOVO: Buscando Tipos de Despesa ---
+    const { documents: expenseTypes, isLoading: isLoadingExpenseTypes } = useCollection(null, expenseTypesQuery);
+    // --- FIM NOVO ---
     
     useEffect(() => {
         if (theme === 'dark') {
@@ -268,7 +277,7 @@ export const AppContent = ({ user }) => {
                     <h1 className="text-3xl sm:text-4xl font-bold text-slate-900 dark:text-white">Controle de Horas e Viagens</h1>
                     <p className="text-lg text-slate-600 dark:text-slate-400 mt-1">AeC Serviços Especializados</p>
                     {/* Botões de Tema e Sair para mobile e desktop */}
-                    <div className="absolute top-0 right-0 flex items-center gap-2 sm:gap-4 p-2 sm:p-0"> {/* Adicionado p-2 sm:p-0 para espaçamento responsivo */}
+                    <div className="absolute top-0 right-0 flex items-center gap-2 sm:gap-4 p-2 sm:p-0">
                         <button onClick={() => setTheme(theme === 'light' ? 'dark' : 'light')} className="p-2 rounded-full bg-slate-200 dark:bg-slate-700">
                             {theme === 'light' ? <Moon /> : <Sun className="text-yellow-300" />}
                         </button>
@@ -277,7 +286,7 @@ export const AppContent = ({ user }) => {
                 </header>
 
                 {/* Botões de Navegação Principal: Layout responsivo */}
-                <div className="flex flex-col sm:flex-row justify-center mb-8 gap-2 sm:gap-4"> {/* flex-col para mobile, flex-row para sm e acima */}
+                <div className="flex flex-col sm:flex-row justify-center mb-8 gap-2 sm:gap-4">
                     <button onClick={() => setCurrentView('dashboard')} className={`px-4 py-2 font-semibold rounded-lg ${currentView === 'dashboard' ? 'bg-purple-600 text-white' : 'bg-white dark:bg-slate-700'}`}><BarChart2 className="inline mr-2" />Dashboard</button>
                     <button onClick={() => setCurrentView('horas')} className={`px-4 py-2 font-semibold rounded-lg ${currentView === 'horas' ? 'bg-blue-600 text-white' : 'bg-white dark:bg-slate-700'}`}><Clock className="inline mr-2" />Horas</button>
                     <button onClick={() => setCurrentView('viagens')} className={`px-4 py-2 font-semibold rounded-lg ${currentView === 'viagens' ? 'bg-green-600 text-white' : 'bg-white dark:bg-slate-700'}`}><Car className="inline mr-2" />Viagens</button>
@@ -286,14 +295,14 @@ export const AppContent = ({ user }) => {
                 {currentView === 'dashboard' && <Dashboard chartData={chartData} />}
 
                 {currentView !== 'dashboard' && (
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4 md:gap-6 lg:gap-8"> {/* Grid responsiva principal */}
-                        <div className="md:col-span-1 lg:col-span-2 space-y-4 md:space-y-6 lg:space-y-8"> {/* Colunas para formulário/listas principais */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4 md:gap-6 lg:gap-8">
+                        <div className="md:col-span-1 lg:col-span-2 space-y-4 md:space-y-6 lg:space-y-8">
                             {currentView === 'horas' && (
                                 <div>
-                                    <div className="bg-white dark:bg-slate-800 p-4 sm:p-6 rounded-xl shadow-lg"> {/* Padding responsivo */}
+                                    <div className="bg-white dark:bg-slate-800 p-4 sm:p-6 rounded-xl shadow-lg">
                                         <h2 className="text-xl font-bold mb-4 flex items-center"><PlusCircle className="mr-2 text-blue-500" /> Adicionar Registro de Horas</h2>
                                         <form onSubmit={handleAddTimeEntry} className="space-y-4">
-                                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4"> {/* Grid responsiva para campos de horas */}
+                                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                                                 <div><label>Funcionário</label><select value={timeForm.employee} onChange={e => setTimeForm({ ...timeForm, employee: e.target.value })} required className="w-full mt-1 p-2 border dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700"><option value="" disabled>Selecione</option>{(employees || []).map(e => <option key={e.id} value={e.name}>{e.name}</option>)}</select></div>
                                                 <div><label>Data</label><input type="date" value={timeForm.date} onChange={e => setTimeForm({ ...timeForm, date: e.target.value })} required className="w-full mt-1 p-2 border dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700" /></div>
                                                 <div><label>Hora Início</label><input type="time" value={timeForm.startTime} onChange={e => setTimeForm({ ...timeForm, startTime: e.target.value })} required className="w-full mt-1 p-2 border dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700" /></div>
@@ -320,10 +329,19 @@ export const AppContent = ({ user }) => {
                                 </div>
                             )}
                         </div>
-                        <div className="md:col-span-1 lg:col-span-3 space-y-4 md:space-y-6 lg:space-y-8"> {/* Colunas para seções de gerenciamento */}
+                        <div className="md:col-span-1 lg:col-span-3 space-y-4 md:space-y-6 lg:space-y-8">
                             <ManagementSection title="Funcionários" icon={Users} items={employees} isLoading={isLoadingEmployees} onAddItem={(name) => handleAddItem('employees', name)} onDeleteItem={(id) => confirmDeleteItem('employees', id)} />
                             <ManagementSection title="Locais" icon={MapPin} items={locations} isLoading={isLoadingLocations} onAddItem={(name) => handleAddItem('locations', name)} onDeleteItem={(id) => confirmDeleteItem('locations', id)} usePlacesAutocomplete={true} />
                             <ManagementSection title="Atividades" icon={ClipboardList} items={activities} isLoading={isLoadingActivities} onAddItem={(name) => handleAddItem('activities', name)} onDeleteItem={(id) => confirmDeleteItem('activities', id)} />
+                            {/* NOVO: Seção de Gerenciamento de Tipos de Despesa */}
+                            <ManagementSection 
+                                title="Tipos de Despesa" 
+                                icon={DollarSign} // Ícone de dólar para despesas
+                                items={expenseTypes} 
+                                isLoading={isLoadingExpenseTypes} 
+                                onAddItem={(name) => handleAddItem('expense_types', name)} 
+                                onDeleteItem={(id) => confirmDeleteItem('expense_types', id)} 
+                            />
                         </div>
                     </div>
                 )}
@@ -339,7 +357,7 @@ export const AppContent = ({ user }) => {
                     {/* Renderiza o formulário de horas ou o TripForm para edição */}
                     {editingRecord?.type === 'horas' && (
                         <form onSubmit={(e) => { e.preventDefault(); handleUpdateRecord(editingRecord); }} className="space-y-4"> 
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4"> {/* Grid responsiva para campos de edição de horas */}
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                                 <div><label>Funcionário</label><select value={editingRecord.employee} onChange={e => setEditingRecord({...editingRecord, employee: e.target.value})} required className="w-full mt-1 p-2 border dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700"><option value="" disabled>Selecione</option>{(employees || []).map(e => <option key={e.id} value={e.name}>{e.name}</option>)}</select></div>
                                 <div><label>Data</label><input type="date" value={editingRecord.date} onChange={e => setEditingRecord({...editingRecord, date: e.target.value})} required className="w-full mt-1 p-2 border dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700"/></div>
                                 <div><label>Hora Início</label><input type="time" value={editingRecord.startTime} onChange={e => setEditingRecord({...editingRecord, startTime: e.target.value})} required className="w-full mt-1 p-2 border dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700"/></div>

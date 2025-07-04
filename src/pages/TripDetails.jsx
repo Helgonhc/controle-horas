@@ -1,11 +1,12 @@
 // Local do arquivo: src/pages/TripDetails.jsx
-import React, { useState, useMemo } from 'react'; // Importa useMemo
+// Adicionado useEffect à importação do React
+import React, { useState, useMemo, useEffect } from 'react'; 
 import { useParams, Link } from 'react-router-dom';
 import { useDocument } from '../hooks/useDocument';
-import { ArrowLeft, User, Calendar, Route, Gauge, DollarSign, PlusCircle, FileText, Upload, Trash2, Download } from 'lucide-react';
+import { ArrowLeft, User, Calendar, Route, Gauge, DollarSign, PlusCircle, FileText, Upload, Trash2, Download } from 'lucide-react'; 
 import { useFirestore } from '../hooks/useFirestore';
 import { db, storage } from '../firebase/config';
-import { collection, doc, addDoc, serverTimestamp, query, orderBy } from 'firebase/firestore'; 
+import { collection, doc, addDoc, serverTimestamp, query, orderBy, deleteDoc as firestoreDeleteDoc } from 'firebase/firestore'; 
 import { ref, uploadBytesResumable, getDownloadURL, deleteObject } from 'firebase/storage'; 
 import { toast } from 'react-toastify';
 import { useCollection } from '../hooks/useCollection'; 
@@ -20,6 +21,10 @@ const formatCurrency = (value) => new Intl.NumberFormat('pt-BR', { style: 'curre
 
 export const TripDetails = ({ user }) => {
     const { tripId } = useParams();
+    
+    // [DEBUG] Log do UID do usuário
+    console.log("[DEBUG TripDetails] UID do usuário:", user?.uid);
+
     const { document: trip, isLoading: isLoadingTrip } = useDocument('trips', tripId, user.uid);
 
     const [expenseType, setExpenseType] = useState('');
@@ -30,20 +35,43 @@ export const TripDetails = ({ user }) => {
     const [fileUploadProgress, setFileUploadProgress] = useState(0);
     const [isUploading, setIsUploading] = useState(false);
 
-    const { addDocument, deleteDocument, response } = useFirestore(`users/${user.uid}/trips/${tripId}/expenses`);
+    const { addDocument, response } = useFirestore(`users/${user.uid}/trips/${tripId}/expenses`);
 
-    // --- NOVO: Memoize a query para as despesas ---
     const expensesQuery = useMemo(() =>
-        query(collection(db, `users/${user.uid}/trips/${tripId}/expenses`), orderBy('date', 'desc')),
-        [user.uid, tripId] // Re-memoiza se o UID do usuário ou o ID da viagem mudar
+        user && tripId ? query(collection(db, `users/${user.uid}/trips/${tripId}/expenses`), orderBy('date', 'desc')) : null,
+        [user, tripId] 
     );
-    // --- FIM DO NOVO ---
 
-    // Passe a query memoizada para useCollection
     const { documents: expenses, isLoading: isLoadingExpenses, error: expensesError } = useCollection(
-        null, // collectionPath é null pois firestoreQuery fornece o caminho completo
+        null, 
         expensesQuery
     );
+
+    // Query e busca para Tipos de Despesa do usuário logado
+    const expenseTypesQuery = useMemo(() => {
+        // [DEBUG] Log da query de tipos de despesa
+        console.log("[DEBUG TripDetails] Construindo expenseTypesQuery. user.uid:", user?.uid);
+        return (user && user.uid) ? query(collection(db, `users/${user.uid}/expense_types`), orderBy('name', 'asc')) : null;
+    }, [user]);
+
+    const { documents: expenseTypes, isLoading: isLoadingExpenseTypes, error: expenseTypesError } = useCollection(null, expenseTypesQuery);
+
+    // [DEBUG] Log do resultado do useCollection para tipos de despesa
+    useEffect(() => { 
+        console.log("[DEBUG TripDetails] expenseTypes carregados:", expenseTypes);
+        console.log("[DEBUG TripDetails] isLoadingExpenseTypes:", isLoadingExpenseTypes);
+        console.log("[DEBUG TripDetails] expenseTypesError:", expenseTypesError);
+        // Se houver um erro, exiba um toast para o usuário
+        if (expenseTypesError) {
+            toast.error(`Erro ao carregar tipos de despesa: ${expenseTypesError}`);
+        }
+    }, [expenseTypes, isLoadingExpenseTypes, expenseTypesError]);
+
+
+    const totalExpensesAmount = useMemo(() => {
+        if (!expenses) return 0;
+        return expenses.reduce((sum, expense) => sum + (expense.amount || 0), 0);
+    }, [expenses]);
 
     const handleFileChange = (e) => {
         let file = e.target.files[0];
@@ -71,72 +99,75 @@ export const TripDetails = ({ user }) => {
             toast.error('Por favor, preencha o tipo, valor e data da despesa.');
             return;
         }
+        // Validação adicional: garante que expenseTypes está carregado e tem o tipo selecionado
+        if (!expenseTypes || !expenseTypes.some(type => type.name === expenseType)) {
+            toast.error('Tipo de despesa inválido. Por favor, selecione um tipo da lista.');
+            return;
+        }
 
         let fileURL = null;
         let filePath = null;
 
-        if (expenseFile) {
+        try {
             setIsUploading(true);
-            const storageRef = ref(storage, `expense_receipts/${user.uid}/${tripId}/${expenseFile.name}_${Date.now()}`);
-            const uploadTask = uploadBytesResumable(storageRef, expenseFile);
+            if (expenseFile) {
+                const storageRef = ref(storage, `expense_receipts/${user.uid}/${tripId}/${Date.now()}_${expenseFile.name}`);
+                const uploadTask = uploadBytesResumable(storageRef, expenseFile);
 
-            uploadTask.on('state_changed',
-                (snapshot) => {
-                    const progress = (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
-                    setFileUploadProgress(progress);
-                },
-                (error) => {
-                    toast.error('Erro ao fazer upload do arquivo: ' + error.message);
-                    setIsUploading(false);
-                },
-                async () => {
-                    fileURL = await getDownloadURL(uploadTask.snapshot.ref);
-                    filePath = uploadTask.snapshot.ref.fullPath;
-                    
-                    const newExpense = {
-                        type: expenseType,
-                        amount: parseFloat(expenseAmount),
-                        date: expenseDate,
-                        description: expenseDescription,
-                        receiptURL: fileURL,
-                        receiptPath: filePath,
-                        createdAt: serverTimestamp(),
-                    };
-                    await addDocument(newExpense);
-                    resetForm();
-                    setIsUploading(false);
-                    toast.success('Despesa adicionada com sucesso!');
-                }
-            );
-        } else {
+                await new Promise((resolve, reject) => {
+                    uploadTask.on('state_changed',
+                        (snapshot) => {
+                            const progress = (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
+                            setFileUploadProgress(progress);
+                        },
+                        (error) => {
+                            toast.error('Erro ao fazer upload do arquivo: ' + error.message);
+                            setIsUploading(false);
+                            reject(error);
+                        },
+                        async () => {
+                            fileURL = await getDownloadURL(uploadTask.snapshot.ref);
+                            filePath = uploadTask.snapshot.ref.fullPath;
+                            resolve();
+                        }
+                    );
+                });
+            }
+
             const newExpense = {
-                type: expenseType,
+                type: expenseType, 
                 amount: parseFloat(expenseAmount),
                 date: expenseDate,
                 description: expenseDescription,
-                receiptURL: null,
-                receiptPath: null,
+                receiptURL: fileURL,
+                receiptPath: filePath,
                 createdAt: serverTimestamp(),
             };
-            await addDocument(newExpense);
-            resetForm();
+            await addDoc(collection(db, `users/${user.uid}/trips/${tripId}/expenses`), newExpense);
             toast.success('Despesa adicionada com sucesso!');
+            resetForm();
+        } catch (error) {
+            toast.error('Falha ao adicionar despesa.');
+            console.error("Erro ao adicionar despesa:", error);
+        } finally {
+            setIsUploading(false);
         }
     };
 
     const handleDeleteExpense = async (expenseId, receiptPath) => {
         if (window.confirm('Tem certeza que deseja excluir esta despesa?')) {
-            if (receiptPath) {
-                const fileRef = ref(storage, receiptPath);
-                try {
+            try {
+                if (receiptPath) {
+                    const fileRef = ref(storage, receiptPath);
                     await deleteObject(fileRef);
-                    toast.success('Arquivo da nota fiscal excluído com sucesso.');
-                } catch (error) {
-                    toast.error('Erro ao excluir arquivo da nota fiscal: ' + error.message);
+                    toast.success('Arquivo da nota fiscal excluído do Storage.');
                 }
+                await firestoreDeleteDoc(doc(db, `users/${user.uid}/trips/${tripId}/expenses`, expenseId));
+                toast.success('Despesa excluída com sucesso!');
+            } catch (error) {
+                toast.error('Falha ao excluir a despesa.');
+                console.error('Erro ao excluir despesa:', error);
             }
-            await deleteDocument(expenseId);
-            toast.success('Despesa excluída com sucesso!');
         }
     };
 
@@ -149,8 +180,8 @@ export const TripDetails = ({ user }) => {
         setFileUploadProgress(0);
     };
 
-    if (isLoadingTrip) {
-        return <div className="text-center mt-10">Carregando detalhes da viagem...</div>;
+    if (isLoadingTrip || isLoadingExpenseTypes) {
+        return <div className="text-center mt-10">Carregando detalhes da viagem e tipos de despesa...</div>;
     }
 
     if (!trip) {
@@ -164,11 +195,12 @@ export const TripDetails = ({ user }) => {
                 Voltar para a lista
             </Link>
 
-            <div className="bg-white dark:bg-slate-800 p-6 rounded-xl shadow-lg">
+            <div className="bg-white dark:bg-slate-800 p-6 rounded-xl shadow-lg mb-6">
                 <h1 className="text-2xl sm:text-3xl font-bold text-slate-900 dark:text-white mb-6">
                     Detalhes da Viagem
                 </h1>
 
+                {/* Seção de Informações Principais */}
                 <div className="space-y-4 text-slate-700 dark:text-slate-300">
                     <div className="flex items-center gap-3"><User size={18} className="text-slate-500" /><span className="font-semibold">{trip.driver}</span></div>
                     <div className="flex items-center gap-3"><Calendar size={18} className="text-slate-500" /><span>{formatDate(trip.date)}</span></div>
@@ -185,11 +217,21 @@ export const TripDetails = ({ user }) => {
                 </div>
             </div>
 
-            <div className="mt-8 bg-white dark:bg-slate-800 p-6 rounded-xl shadow-lg">
+            {/* Seção de Controle de Despesas */}
+            <div className="bg-white dark:bg-slate-800 p-6 rounded-xl shadow-lg">
                 <h2 className="text-xl font-bold text-slate-800 dark:text-slate-200 mb-4">
                     Controle de Despesas
                 </h2>
 
+                {/* Exibição do Total de Despesas */}
+                <div className="border-t border-b border-slate-200 dark:border-slate-700 py-3 mb-6">
+                    <p className="text-lg sm:text-xl font-bold text-slate-900 dark:text-white flex items-center justify-between">
+                        <span>Total de Despesas:</span>
+                        <span className="text-green-600 dark:text-green-400">{formatCurrency(totalExpensesAmount)}</span>
+                    </p>
+                </div>
+
+                {/* Formulário para Adicionar Despesa */}
                 <form onSubmit={handleAddExpense} className="space-y-4 border-b border-slate-200 dark:border-slate-700 pb-6 mb-6">
                     <h3 className="text-lg font-semibold text-slate-700 dark:text-slate-300">Adicionar Nova Despesa</h3>
                     
@@ -203,12 +245,22 @@ export const TripDetails = ({ user }) => {
                             required
                         >
                             <option value="">Selecione o tipo</option>
-                            <option value="combustivel">Combustível</option>
-                            <option value="alimentacao">Alimentação</option>
-                            <option value="hospedagem">Hospedagem</option>
-                            <option value="pedagio">Pedágio</option>
-                            <option value="manutencao">Manutenção</option>
-                            <option value="outros">Outros</option>
+                            {/* Mapeia os tipos de despesa do Firestore */}
+                            {isLoadingExpenseTypes ? (
+                                <option disabled>Carregando tipos...</option>
+                            ) : expenseTypesError ? (
+                                <option disabled>Erro ao carregar tipos.</option>
+                            ) : (
+                                (expenseTypes && expenseTypes.length > 0) ? (
+                                    expenseTypes.map((type) => (
+                                        <option key={type.id} value={type.name}>
+                                            {type.name}
+                                        </option>
+                                    ))
+                                ) : (
+                                    <option disabled>Nenhum tipo de despesa cadastrado. Adicione em "Gerenciamento".</option>
+                                )
+                            )}
                         </select>
                     </div>
 
@@ -238,13 +290,14 @@ export const TripDetails = ({ user }) => {
                     </div>
 
                     <div>
-                        <label htmlFor="expenseDescription" className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Descrição (Opcional)</label>
+                        <label htmlFor="expenseDescription" className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Descrição Adicional (Opcional)</label>
                         <textarea
                             id="expenseDescription"
                             className="w-full p-2 border border-slate-300 dark:border-slate-600 rounded-md bg-slate-50 dark:bg-slate-700 text-slate-900 dark:text-white focus:ring-blue-500 focus:border-blue-500"
                             value={expenseDescription}
                             onChange={(e) => setExpenseDescription(e.target.value)}
                             rows="2"
+                            placeholder="Detalhes extras sobre a despesa..."
                         ></textarea>
                     </div>
 
@@ -280,6 +333,7 @@ export const TripDetails = ({ user }) => {
                     {response.error && <p className="text-red-500 text-sm mt-2">{response.error}</p>}
                 </form>
 
+                {/* Lista de Despesas */}
                 <h3 className="text-lg font-semibold text-slate-700 dark:text-slate-300 mb-4">Despesas da Viagem</h3>
                 {isLoadingExpenses && <p className="text-center text-slate-500">Carregando despesas...</p>}
                 {expensesError && <p className="text-red-500 text-center">{expensesError}</p>}
@@ -292,7 +346,7 @@ export const TripDetails = ({ user }) => {
                             <div>
                                 <p className="font-semibold text-slate-800 dark:text-slate-200 capitalize">{expense.type}</p>
                                 <p className="text-sm text-slate-600 dark:text-slate-400">{formatCurrency(expense.amount)} - {formatDate(expense.date)}</p>
-                                {expense.description && <p className="text-xs text-slate-500 dark:text-slate-500 italic mt-1">{expense.description}</p>}
+                                {expense.description && <p className="text-xs text-slate-500 dark:text-slate-500 italic mt-1">Obs: {expense.description}</p>}
                             </div>
                             <div className="flex items-center gap-2">
                                 {expense.receiptURL && (
