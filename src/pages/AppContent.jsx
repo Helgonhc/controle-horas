@@ -1,4 +1,6 @@
-import React, { useState, useEffect } from 'react';
+// Local do arquivo: src/pages/AppContent.jsx
+
+import React, { useState, useEffect, useMemo } from 'react';
 import { db, auth } from '../firebase/config';
 import { collection, addDoc, serverTimestamp, doc, deleteDoc, updateDoc } from 'firebase/firestore';
 import { toast } from 'react-toastify';
@@ -9,33 +11,31 @@ import { ManagementSection } from '../components/ManagementSection';
 import { Modal } from '../components/Modal';
 import { TimeLogList } from '../components/TimeLogList';
 import { TripLogList } from '../components/TripLogList';
+import { Dashboard } from './Dashboard';
+import { TripForm } from '../components/TripForm';
 
-// Ícones (Adicionamos o 'LoaderCircle' para o nosso spinner)
+// Ícones
 import { Clock, PlusCircle, MapPin, ClipboardList, Car, Users, Route, Edit, Sun, Moon, BarChart2, LoaderCircle } from 'lucide-react';
 
 const COST_PER_KM = 0.50;
 
 export const AppContent = ({ user }) => {
-    const [currentView, setCurrentView] = useState('horas');
+    const [currentView, setCurrentView] = useState('dashboard');
     const [theme, setTheme] = useState(localStorage.getItem('theme') || 'light');
-    
     const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
     const [deletingInfo, setDeletingInfo] = useState(null);
     const [isEditModalOpen, setIsEditModalOpen] = useState(false);
     const [editingRecord, setEditingRecord] = useState(null);
-
-    // NOVO: Estado para controlar o carregamento dos formulários
     const [isSubmitting, setIsSubmitting] = useState(false);
-
+    
     const [timeForm, setTimeForm] = useState({ employee: '', date: new Date().toISOString().split('T')[0], startTime: '', endTime: '', location: '', activity: '' });
-    const [tripForm, setTripForm] = useState({ driver: '', date: new Date().toISOString().split('T')[0], origin: '', destination: '', startKm: '', endKm: '', notes: '' });
 
     const { documents: timeLogs, isLoading: isLoadingTime } = useCollection('time_entries', user.uid);
     const { documents: tripLogs, isLoading: isLoadingTrips } = useCollection('trips', user.uid);
     const { documents: employees, isLoading: isLoadingEmployees } = useCollection('employees', user.uid);
     const { documents: locations, isLoading: isLoadingLocations } = useCollection('locations', user.uid);
     const { documents: activities, isLoading: isLoadingActivities } = useCollection('activities', user.uid);
-
+    
     useEffect(() => {
         if (theme === 'dark') {
             document.documentElement.classList.add('dark');
@@ -44,6 +44,24 @@ export const AppContent = ({ user }) => {
         }
         localStorage.setItem('theme', theme);
     }, [theme]);
+
+    const chartData = useMemo(() => {
+        const hoursByEmployee = employees.map(employee => {
+            const totalHours = timeLogs
+                .filter(log => log.employee === employee.name)
+                .reduce((sum, log) => sum + (log.durationInHours || 0), 0);
+            return { name: employee.name, Horas: parseFloat(totalHours.toFixed(2)) };
+        }).filter(item => item.Horas > 0);
+
+        const distanceByDriver = employees.map(employee => {
+            const totalDistance = tripLogs
+                .filter(log => log.driver === employee.name)
+                .reduce((sum, log) => sum + (log.distance || 0), 0);
+            return { name: employee.name, Distância: parseFloat(totalDistance.toFixed(2)) };
+        }).filter(item => item.Distância > 0);
+
+        return { hoursByEmployee, distanceByDriver };
+    }, [employees, timeLogs, tripLogs]);
 
     const handleAddItem = async (collectionName, name, cost) => {
         if (!user || !name || isSubmitting) return;
@@ -94,13 +112,11 @@ export const AppContent = ({ user }) => {
             const durationInHours = diff / 3600000;
             const employeeData = employees.find(emp => emp.name === employeeName);
             const totalCost = durationInHours * (employeeData?.costPerHour || 0);
-
             if (Object.values(timeForm).some(v => !v) || durationInHours <= 0) {
                 toast.warn("Por favor, preencha todos os campos corretamente.");
-                setIsSubmitting(false); // Libera o botão se houver erro de validação
+                setIsSubmitting(false);
                 return;
             }
-
             const data = { ...timeForm, durationInHours, totalCost, createdAt: serverTimestamp() };
             await addDoc(collection(db, "users", user.uid, 'time_entries'), data);
             toast.success("Registro de horas adicionado!");
@@ -112,24 +128,19 @@ export const AppContent = ({ user }) => {
         }
     };
 
-    const handleAddTripEntry = async (e) => {
-        e.preventDefault();
+    const handleAddTripEntry = async (tripData) => {
         if (isSubmitting) return;
         setIsSubmitting(true);
         try {
-            const distance = parseFloat(tripForm.endKm) - parseFloat(tripForm.startKm);
-            if (!tripForm.driver || !tripForm.date || !tripForm.origin || !tripForm.destination || !tripForm.startKm || !tripForm.endKm || distance < 0) {
-                toast.warn("Por favor, preencha todos os campos corretamente.");
-                setIsSubmitting(false); // Libera o botão se houver erro de validação
-                return;
-            }
-
-            const data = { ...tripForm, distance, totalCost: distance * COST_PER_KM, createdAt: serverTimestamp() };
+            const data = {
+                ...tripData,
+                totalCost: tripData.distance * COST_PER_KM,
+                createdAt: serverTimestamp()
+            };
             await addDoc(collection(db, "users", user.uid, 'trips'), data);
             toast.success("Registro de viagem adicionado!");
-            setTripForm({ driver: '', date: new Date().toISOString().split('T')[0], origin: '', destination: '', startKm: '', endKm: '', notes: '' });
         } catch (error) {
-            toast.error("Falha ao adicionar registro.");
+            toast.error("Falha ao adicionar registro de viagem.");
         } finally {
             setIsSubmitting(false);
         }
@@ -138,6 +149,10 @@ export const AppContent = ({ user }) => {
     const handleSignOut = () => { auth.signOut(); };
 
     const handleOpenEditModal = (record, type) => {
+        if (type === 'viagens') {
+            toast.info("A edição de viagens com mapa ainda não foi implementada.");
+            return;
+        }
         setEditingRecord({...record, type});
         setIsEditModalOpen(true);
     };
@@ -146,16 +161,13 @@ export const AppContent = ({ user }) => {
         e.preventDefault();
         if (isSubmitting) return;
         setIsSubmitting(true);
-        
         const recordToUpdate = { ...editingRecord };
         setIsEditModalOpen(false);
         setEditingRecord(null);
-
         try {
             const { id, type } = recordToUpdate;
             let dataToUpdate = { ...recordToUpdate };
             let collectionName = '';
-
             if (type === 'horas') {
                 collectionName = 'time_entries';
                 const { startTime, endTime, employee: employeeName } = recordToUpdate;
@@ -168,22 +180,9 @@ export const AppContent = ({ user }) => {
                 const totalCost = durationInHours * (employeeData?.costPerHour || 0);
                 dataToUpdate = { ...dataToUpdate, durationInHours, totalCost };
             }
-            else if (type === 'viagens') {
-                collectionName = 'trips';
-                const distance = parseFloat(recordToUpdate.endKm) - parseFloat(recordToUpdate.startKm);
-                if (distance < 0) {
-                    toast.warn("KM Final não pode ser menor que o KM Inicial.");
-                    setIsSubmitting(false); // Libera o botão se houver erro de validação
-                    return;
-                }
-                const totalCost = distance * COST_PER_KM;
-                dataToUpdate = { ...dataToUpdate, distance, totalCost };
-            }
-            
             const docRef = doc(db, "users", user.uid, collectionName, id);
             await updateDoc(docRef, dataToUpdate);
             toast.success("Registro atualizado com sucesso!");
-            
         } catch (error) {
             toast.error("Falha ao atualizar o registro.");
         } finally {
@@ -211,7 +210,7 @@ export const AppContent = ({ user }) => {
                     <button onClick={() => setCurrentView('viagens')} className={`px-4 py-2 font-semibold rounded-lg ${currentView === 'viagens' ? 'bg-green-600 text-white' : 'bg-white dark:bg-slate-700'}`}><Car className="inline mr-2" />Viagens</button>
                 </div>
 
-                {currentView === 'dashboard' && <div className="bg-white dark:bg-slate-800 p-6 rounded-xl shadow-lg"><h2 className="text-2xl font-bold mb-6 text-center">Dashboard (Em breve)</h2></div>}
+                {currentView === 'dashboard' && <Dashboard chartData={chartData} />}
 
                 {currentView !== 'dashboard' && (
                     <div className="grid grid-cols-1 lg:grid-cols-5 gap-8">
@@ -239,31 +238,20 @@ export const AppContent = ({ user }) => {
                             )}
                             {currentView === 'viagens' && (
                                 <div>
-                                    <div className="bg-white dark:bg-slate-800 p-6 rounded-xl shadow-lg">
-                                        <h2 className="text-xl font-bold mb-4 flex items-center"><Route className="mr-2 text-green-500" /> Adicionar Registro de Viagem</h2>
-                                        <form onSubmit={handleAddTripEntry} className="space-y-4">
-                                            <div className="grid grid-cols-2 gap-4">
-                                                <div><label>Motorista</label><select value={tripForm.driver} onChange={e => setTripForm({ ...tripForm, driver: e.target.value })} required className="w-full mt-1 p-2 border dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700"><option value="" disabled>Selecione</option>{employees.map(e => <option key={e.id} value={e.name}>{e.name}</option>)}</select></div>
-                                                <div><label>Data</label><input type="date" value={tripForm.date} onChange={e => setTripForm({ ...tripForm, date: e.target.value })} required className="w-full mt-1 p-2 border dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700" /></div>
-                                                <div><label>Origem</label><input type="text" value={tripForm.origin} onChange={e => setTripForm({ ...tripForm, origin: e.target.value })} required className="w-full mt-1 p-2 border dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700" /></div>
-                                                <div><label>Destino</label><input type="text" value={tripForm.destination} onChange={e => setTripForm({ ...tripForm, destination: e.target.value })} required className="w-full mt-1 p-2 border dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700" /></div>
-                                                <div><label>KM Inicial</label><input type="number" value={tripForm.startKm} onChange={e => setTripForm({ ...tripForm, startKm: e.target.value })} required className="w-full mt-1 p-2 border dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700" /></div>
-                                                <div><label>KM Final</label><input type="number" value={tripForm.endKm} onChange={e => setTripForm({ ...tripForm, endKm: e.target.value })} required className="w-full mt-1 p-2 border dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700" /></div>
-                                            </div>
-                                            <div><label>Observações</label><textarea value={tripForm.notes} onChange={e => setTripForm({ ...tripForm, notes: e.target.value })} className="w-full mt-1 p-2 border dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700" rows="2" /></div>
-                                            <button type="submit" disabled={isSubmitting} className="w-full bg-green-600 text-white font-bold py-2.5 px-4 rounded-lg hover:bg-green-700 flex items-center justify-center disabled:bg-green-400">
-                                                {isSubmitting ? <><LoaderCircle className="animate-spin mr-2" /> Guardando...</> : 'Guardar'}
-                                            </button>
-                                        </form>
-                                    </div>
+                                    <TripForm 
+                                        employees={employees} 
+                                        onAddTrip={handleAddTripEntry} 
+                                        isSubmitting={isSubmitting} 
+                                    />
                                     <TripLogList logs={tripLogs} isLoading={isLoadingTrips} onEdit={(record) => handleOpenEditModal(record, 'viagens')} onDelete={(id) => confirmDeleteItem('trips', id)} />
                                 </div>
                             )}
                         </div>
                         <div className="lg:col-span-3 space-y-6">
-                            <ManagementSection title="Funcionários" icon={Users} items={employees} isLoading={isLoadingEmployees} hasCost={true} onAddItem={handleAddItem} onDeleteItem={(id) => confirmDeleteItem('employees', id)} isSubmitting={isSubmitting} />
-                            <ManagementSection title="Locais" icon={MapPin} items={locations} isLoading={isLoadingLocations} onAddItem={(name) => handleAddItem('locations', name)} onDeleteItem={(id) => confirmDeleteItem('locations', id)} isSubmitting={isSubmitting} />
-                            <ManagementSection title="Atividades" icon={ClipboardList} items={activities} isLoading={isLoadingActivities} onAddItem={(name) => handleAddItem('activities', name)} onDeleteItem={(id) => confirmDeleteItem('activities', id)} isSubmitting={isSubmitting} />
+                            <ManagementSection title="Funcionários" icon={Users} items={employees} isLoading={isLoadingEmployees} hasCost={true} onAddItem={handleAddItem} onDeleteItem={(id) => confirmDeleteItem('employees', id)} />
+                            {/* ATIVANDO O AUTOCOMPLETE PARA LOCAIS */}
+                            <ManagementSection title="Locais" icon={MapPin} items={locations} isLoading={isLoadingLocations} onAddItem={(name) => handleAddItem('locations', name)} onDeleteItem={(id) => confirmDeleteItem('locations', id)} usePlacesAutocomplete={true} />
+                            <ManagementSection title="Atividades" icon={ClipboardList} items={activities} isLoading={isLoadingActivities} onAddItem={(name) => handleAddItem('activities', name)} onDeleteItem={(id) => confirmDeleteItem('activities', id)} />
                         </div>
                     </div>
                 )}
@@ -287,24 +275,6 @@ export const AppContent = ({ user }) => {
                             <div className="flex justify-end gap-4 mt-6">
                                 <button type="button" onClick={() => setIsEditModalOpen(false)} className="px-4 py-2 rounded-lg bg-slate-200 dark:bg-slate-600">Cancelar</button>
                                 <button type="submit" disabled={isSubmitting} className="px-4 py-2 rounded-lg bg-blue-600 text-white flex items-center justify-center disabled:bg-blue-400">
-                                    {isSubmitting ? <><LoaderCircle className="animate-spin mr-2" /> Guardando...</> : 'Guardar Alterações'}
-                                </button>
-                            </div>
-                        </form>
-                    )}
-                    {editingRecord?.type === 'viagens' && (
-                        <form onSubmit={handleUpdateRecord} className="space-y-4">
-                            <div className="grid grid-cols-2 gap-4">
-                                <div><label>Motorista</label><select value={editingRecord.driver} onChange={e => setEditingRecord({...editingRecord, driver: e.target.value})} required className="w-full mt-1 p-2 border dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700"><option value="" disabled>Selecione</option>{employees.map(e => <option key={e.id} value={e.name}>{e.name}</option>)}</select></div>
-                                <div><label>Data</label><input type="date" value={editingRecord.date} onChange={e => setEditingRecord({...editingRecord, date: e.target.value})} required className="w-full mt-1 p-2 border dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700"/></div>
-                                <div><label>Origem</label><input type="text" value={editingRecord.origin} onChange={e => setEditingRecord({...editingRecord, origin: e.target.value})} required className="w-full mt-1 p-2 border dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700"/></div>
-                                <div><label>Destino</label><input type="text" value={editingRecord.destination} onChange={e => setEditingRecord({...editingRecord, destination: e.target.value})} required className="w-full mt-1 p-2 border dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700"/></div>
-                                <div><label>KM Inicial</label><input type="number" value={editingRecord.startKm} onChange={e => setEditingRecord({...editingRecord, startKm: e.target.value})} required className="w-full mt-1 p-2 border dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700"/></div>
-                                <div><label>KM Final</label><input type="number" value={editingRecord.endKm} onChange={e => setEditingRecord({...editingRecord, endKm: e.target.value})} required className="w-full mt-1 p-2 border dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700"/></div>
-                            </div>
-                            <div className="flex justify-end gap-4 mt-6">
-                                <button type="button" onClick={() => setIsEditModalOpen(false)} className="px-4 py-2 rounded-lg bg-slate-200 dark:bg-slate-600">Cancelar</button>
-                                <button type="submit" disabled={isSubmitting} className="px-4 py-2 rounded-lg bg-green-600 text-white flex items-center justify-center disabled:bg-green-400">
                                     {isSubmitting ? <><LoaderCircle className="animate-spin mr-2" /> Guardando...</> : 'Guardar Alterações'}
                                 </button>
                             </div>

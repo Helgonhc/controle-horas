@@ -1,19 +1,22 @@
-// src/components/ManagementSection.jsx
+// Local do arquivo: src/components/ManagementSection.jsx
+
 import React, { useState } from 'react';
 import { Trash2 } from 'lucide-react';
+import { PlacesAutocompleteInput } from './PlacesAutocompleteInput'; // Importa o novo componente
 
-// Colocamos a função de formatação aqui para que o componente seja autossuficiente
 const formatCurrency = (value) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value || 0);
 
-export const ManagementSection = ({ title, icon, items, onAddItem, onDeleteItem, isLoading, hasCost = false }) => {
+// Adicionamos a prop 'usePlacesAutocomplete'
+export const ManagementSection = ({ title, icon, items, onAddItem, onDeleteItem, isLoading, hasCost = false, usePlacesAutocomplete = false }) => {
     const [newItemName, setNewItemName] = useState('');
     const [newItemCost, setNewItemCost] = useState('');
     const IconComponent = icon;
 
     const handleSubmit = (e) => {
         e.preventDefault();
-        if (newItemName.trim()) {
-            onAddItem(newItemName.trim(), newItemCost);
+        const finalItemName = typeof newItemName === 'object' ? newItemName.address : newItemName;
+        if (finalItemName && finalItemName.trim()) {
+            onAddItem(finalItemName.trim(), newItemCost);
             setNewItemName('');
             setNewItemCost('');
         }
@@ -26,12 +29,20 @@ export const ManagementSection = ({ title, icon, items, onAddItem, onDeleteItem,
                 {title}
             </h3>
             <form onSubmit={handleSubmit} className="flex items-center gap-2 mb-2">
-                <input value={newItemName} onChange={e => setNewItemName(e.target.value)} placeholder="Nome..." className="flex-grow p-2 border rounded-lg h-10 bg-white dark:bg-slate-700 dark:border-slate-600 dark:text-white" />
+                {/* Lógica para usar o campo de busca de endereço ou o campo normal */}
+                {usePlacesAutocomplete ? (
+                    <div className="flex-grow">
+                        <PlacesAutocompleteInput onSelect={setNewItemName} initialValue={newItemName} />
+                    </div>
+                ) : (
+                    <input value={newItemName} onChange={e => setNewItemName(e.target.value)} placeholder="Nome..." className="flex-grow p-2 border rounded-lg h-10 bg-white dark:bg-slate-700 dark:border-slate-600 dark:text-white" />
+                )}
+
                 {hasCost && <input type="number" value={newItemCost} onChange={e => setNewItemCost(e.target.value)} placeholder="Custo/h" className="w-24 p-2 border rounded-lg h-10 bg-white dark:bg-slate-700 dark:border-slate-600 dark:text-white" />}
                 <button type="submit" className="bg-green-500 text-white rounded-lg hover:bg-green-600 h-10 w-10 flex-shrink-0 flex items-center justify-center text-xl font-bold">+</button>
             </form>
             <div className="max-h-32 overflow-y-auto space-y-1 pr-1">
-                {isLoading ? <p className="text-sm text-slate-500">A carregar...</p> :
+                {isLoading ? <p className="text-sm text-slate-500">Carregando...</p> :
                     items.map(item => (
                         <div key={item.id} className="flex justify-between items-center bg-slate-50 dark:bg-slate-700 p-1.5 rounded">
                             <span className="text-sm truncate pr-2 text-slate-700 dark:text-slate-300">{item.name}{hasCost && item.costPerHour ? ` (${formatCurrency(item.costPerHour)})` : ''}</span>
